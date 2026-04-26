@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "20993329734",
+    "project_id": "confecciones-eyp-b49c8",
+    "storage_bucket": "confecciones-eyp-b49c8.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:20993329734:android:88d6d19fc40c61edd85847",
+        "android_client_info": {
+          "package_name": "com.confeccioneseyp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBDKZZbOCzeNEYW_1Yr7ZBcGnHiK6GasAs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
