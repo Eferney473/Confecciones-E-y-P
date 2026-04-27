@@ -108,31 +108,69 @@ const RemisionesScreen = () => {
     setForm({...form, insumos: newInsumos});
   };
 
-  const guardarRemision = async () => {
-    if (!form.numero || form.referencias.length === 0) {
-      Alert.alert("Error", "Completa el número y añade al menos una referencia");
-      return;
+ // Agrega esta función antes de guardarRemision para asegurar la limpieza
+const cerrarModal = () => {
+  setModalVisible(false);
+  setEditandoId(null);
+  setForm({ 
+    numero: '', 
+    cliente: '', 
+    estadoPago: 'Por Cobrar', 
+    referencias: [], 
+    insumos: [] 
+  });
+};
+
+const guardarRemision = async () => {
+  // Aseguramos que el número sea String para que la validación funcione
+  const numeroLimpio = form.numero.toString().trim();
+
+  if (!numeroLimpio || form.referencias.length === 0) {
+    Alert.alert("Error", "Completa el número y añade al menos una referencia");
+    return;
+  }
+
+  try {
+    // Validación de duplicados
+    if (!editandoId) {
+      const snapshot = await firestore()
+        .collection('remisiones')
+        .where('numero', '==', numeroLimpio)
+        .get();
+
+      if (!snapshot.empty) {
+        Alert.alert("Número Duplicado", `La remisión #${numeroLimpio} ya existe.`);
+        return;
+      }
     }
-    
-    // Calcula el total sumando el valorTotal de cada referencia
+
+    // Calculamos el total
     const totalRemision = form.referencias.reduce((acc, curr) => acc + (parseFloat(curr.valorTotal) || 0), 0);
     
+    // OBJETO DE DATOS: Aquí es donde "creamos" los campos faltantes
     const dataObj = {
       ...form,
+      numero: numeroLimpio,
       totalGeneral: totalRemision,
-      fechaCreacion: firestore.FieldValue.serverTimestamp()
+      estadoProduccion: 'Pendiente', // <--- ESTO CREA EL CAMPO PARA LA NOTIFICACIÓN
+      maquinaActual: 'Sin Asignar',  // <--- ESTO AYUDA A LA PANTALLA DE PRODUCCIÓN
+      fechaCreacion: editandoId ? form.fechaCreacion : firestore.FieldValue.serverTimestamp()
     };
 
     if (editandoId) {
       await firestore().collection('remisiones').doc(editandoId).update(dataObj);
+      Alert.alert("Éxito", "Remisión actualizada");
     } else {
       await firestore().collection('remisiones').add(dataObj);
+      Alert.alert("Éxito", "Enviada a producción");
     }
     
-    setModalVisible(false);
-    setEditandoId(null);
-    setForm({ numero: '', cliente: '', estadoPago: 'Por Cobrar', referencias: [], insumos: [] });
-  };
+    cerrarModal(); 
+
+  } catch (error) {
+    Alert.alert("Error", "No se pudo conectar con Firebase.");
+  }
+};
 
   // --- RENDER DE TARJETA ---
   const renderItem = ({ item }) => (

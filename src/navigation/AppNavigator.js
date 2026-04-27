@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react'; // Agregado
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import firestore from '@react-native-firebase/firestore'; // Agregado
 
 // Pantallas
 import SplashScreen from '../screens/SplashScreen';
@@ -17,43 +18,84 @@ import MensajesScreen from '../screens/MensajesScreen';
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
 
-// Este es el Navegador de Pestañas Inferiores
 const MainTabs = () => {
+  // Lógica de notificaciones movida dentro del componente
+  const [pendientesCount, setPendientesCount] = useState(0);
+
+  // Dentro de MainTabs en AppNavigator.js
+
+  // En AppNavigator.js (MainTabs)
+  useEffect(() => {
+    const unsub = firestore()
+      .collectionGroup('remisiones') // Cambiado de .collection a .collectionGroup
+      .where('estadoProduccion', '==', 'Pendiente')
+      .onSnapshot(snap => {
+        setPendientesCount(snap?.size || 0);
+      }, err => console.log("Error en badge:", err));
+
+    return () => unsub();
+  }, []);
+
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
-        headerStyle: { backgroundColor: '#097678' }, // Color del Toolbar
-        headerTintColor: '#FFF', // Color del texto del Toolbar
+        headerStyle: { backgroundColor: '#097678' },
+        headerTintColor: '#FFF',
         headerTitleAlign: 'center',
         tabBarActiveTintColor: '#097678',
         tabBarInactiveTintColor: 'gray',
         tabBarStyle: { paddingBottom: 10 },
-        tabBarIcon: ({ color, size }) => {
-          let iconName;
-          if (route.name === 'Inicio') iconName = 'home';
-          else if (route.name === 'Inventario') iconName = 'archive-outline';
-          else if (route.name === 'Producción') iconName = 'factory';
-          else if (route.name === 'Mensajes') iconName = 'chat-outline';
-          else if (route.name === 'Remisiones') iconName = 'truck-outline';
-          else if (route.name === 'Máquinas') iconName = 'cog';
-          else if (route.name === 'Mensajes') iconName = 'chat-outline';
-
-          return <Icon name={iconName} size={size} color={color} />;
-        },
       })}
     >
-      <Tab.Screen name="Inicio" component={HomeScreen} options={{ title: 'Inicio' }} />
-      {/* Agrega más pestañas aquí cuando crees los archivos de las pantallas */}
-      <Tab.Screen name="Inventario" component={InventarioScreen} options={{ title: 'Inventario' }} />
-      <Tab.Screen name="Producción" component={ProduccionScreen} options={{ title: 'Producción' }} />
-      <Tab.Screen name="Remisiones" component={RemisionesScreen} options={{ title: 'Remisiones' }} />
-      <Tab.Screen name="Máquinas" component={MaquinasScreen} options={{ title: 'Máquinas' }} />
-      <Tab.Screen name="Mensajes" component={MensajesScreen} options={{ title: 'Mensajes' }} />
+      <Tab.Screen 
+        name="Inicio" 
+        component={HomeScreen} 
+        options={{ 
+          tabBarIcon: ({ color, size }) => <Icon name="home" size={size} color={color} /> 
+        }} 
+      />
+      <Tab.Screen 
+        name="Inventario" 
+        component={InventarioScreen} 
+        options={{ 
+          tabBarIcon: ({ color, size }) => <Icon name="archive-outline" size={size} color={color} /> 
+        }} 
+      />
+      <Tab.Screen 
+        name="Produccion" 
+        component={ProduccionScreen} 
+        options={{
+          tabBarLabel: 'Producción',
+          tabBarBadge: pendientesCount > 0 ? pendientesCount : null,
+          tabBarBadgeStyle: { backgroundColor: '#E74C3C', color: 'white' },
+          tabBarIcon: ({ color, size }) => <Icon name="factory" color={color} size={size} />,
+        }} 
+      />
+      <Tab.Screen 
+        name="Remisiones" 
+        component={RemisionesScreen} 
+        options={{ 
+          tabBarIcon: ({ color, size }) => <Icon name="truck-outline" size={size} color={color} /> 
+        }} 
+      />
+      <Tab.Screen 
+        name="Máquinas" 
+        component={MaquinasScreen} 
+        options={{ 
+          tabBarIcon: ({ color, size }) => <Icon name="cog" size={size} color={color} /> 
+        }} 
+      />
+      <Tab.Screen 
+        name="Mensajes" 
+        component={MensajesScreen} 
+        options={{ 
+          tabBarIcon: ({ color, size }) => <Icon name="chat-outline" size={size} color={color} /> 
+        }} 
+      />
     </Tab.Navigator>
   );
 };
 
-// Navegador Principal (Stack)
 const AppNavigator = () => {
   return (
     <NavigationContainer>
