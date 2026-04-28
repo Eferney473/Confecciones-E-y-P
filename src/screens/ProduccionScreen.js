@@ -79,9 +79,13 @@ const ProduccionScreen = () => {
           <View style={styles.rowInfo}>
             <View>
               <Text style={styles.clienteTitle}>{item.cliente}</Text>
-              <Text style={styles.subText}>Ref: {item.referencias?.[0]?.ref || 'N/A'} | #{item.numero}</Text>
+              <Text style={styles.subText}>
+                {item.referencias?.length > 1 
+                  ? `${item.referencias.length} Referencias` 
+                  : `Ref: ${item.referencias?.[0]?.ref || 'N/A'}`} | #{item.numero}
+              </Text>
             </View>
-            <Text style={styles.cantTotal}>{item.referencias?.[0]?.cantidad || 0} unds</Text>
+           <Text style={styles.cantTotal}>{item.totalPrendas || 0} unds</Text>
           </View>
 
           {/* Caja de Máquina Actual */}

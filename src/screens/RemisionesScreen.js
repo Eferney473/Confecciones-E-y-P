@@ -122,8 +122,7 @@ const cerrarModal = () => {
 };
 
 const guardarRemision = async () => {
-  // Aseguramos que el número sea String para que la validación funcione
-  const numeroLimpio = form.numero.toString().trim();
+  const numeroLimpio = form.numero ? String(form.numero).trim() : '';
 
   if (!numeroLimpio || form.referencias.length === 0) {
     Alert.alert("Error", "Completa el número y añade al menos una referencia");
@@ -131,7 +130,7 @@ const guardarRemision = async () => {
   }
 
   try {
-    // Validación de duplicados
+    // 1. Validación de duplicados
     if (!editandoId) {
       const snapshot = await firestore()
         .collection('remisiones')
@@ -144,27 +143,34 @@ const guardarRemision = async () => {
       }
     }
 
-    // Calculamos el total
-    const totalRemision = form.referencias.reduce((acc, curr) => acc + (parseFloat(curr.valorTotal) || 0), 0);
+    // 2. CÁLCULO TOTAL DE PRENDAS (Suma todas las cantidades de la lista)
+    const totalUnidades = form.referencias.reduce((acc, curr) => {
+      return acc + (parseInt(curr.cantidad) || 0);
+    }, 0);
+
+    // 3. CÁLCULO TOTAL DINERO (Suma todos los valores totales)
+    const totalDinero = form.referencias.reduce((acc, curr) => {
+      return acc + (parseFloat(curr.valorTotal) || 0);
+    }, 0);
     
-    // OBJETO DE DATOS: Aquí es donde "creamos" los campos faltantes
+    // 4. OBJETO DE DATOS ACTUALIZADO
     const dataObj = {
       ...form,
       numero: numeroLimpio,
-      totalGeneral: totalRemision,
-      estadoProduccion: 'Pendiente', // <--- ESTO CREA EL CAMPO PARA LA NOTIFICACIÓN
-      maquinaActual: 'Sin Asignar',  // <--- ESTO AYUDA A LA PANTALLA DE PRODUCCIÓN
+      totalGeneral: totalDinero,    // Para el cobro
+      totalPrendas: totalUnidades,  // Para mostrar en el Panel de Producción
+      estadoProduccion: 'Pendiente',
+      maquinaActual: 'Sin Asignar',
       fechaCreacion: editandoId ? form.fechaCreacion : firestore.FieldValue.serverTimestamp()
     };
 
     if (editandoId) {
       await firestore().collection('remisiones').doc(editandoId).update(dataObj);
-      Alert.alert("Éxito", "Remisión actualizada");
     } else {
       await firestore().collection('remisiones').add(dataObj);
-      Alert.alert("Éxito", "Enviada a producción");
     }
     
+    Alert.alert("Éxito", `Remisión #${numeroLimpio} cargada con ${totalUnidades} prendas.`);
     cerrarModal(); 
 
   } catch (error) {

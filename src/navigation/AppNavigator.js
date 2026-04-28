@@ -19,20 +19,25 @@ const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
 
 const MainTabs = () => {
-  // Lógica de notificaciones movida dentro del componente
   const [pendientesCount, setPendientesCount] = useState(0);
 
-  // Dentro de MainTabs en AppNavigator.js
-
-  // En AppNavigator.js (MainTabs)
   useEffect(() => {
+    // 1. Creamos la referencia a la colección
+    // Usamos onSnapshot para que Firebase nos avise CUALQUIER cambio al instante
     const unsub = firestore()
-      .collectionGroup('remisiones') // Cambiado de .collection a .collectionGroup
-      .where('estadoProduccion', '==', 'Pendiente')
-      .onSnapshot(snap => {
-        setPendientesCount(snap?.size || 0);
-      }, err => console.log("Error en badge:", err));
+      .collection('remisiones')
+      .where('estadoProduccion', '==', 'Pendiente') // Filtro estricto
+      .onSnapshot(querySnapshot => {
+        if (querySnapshot) {
+          // 2. Actualizamos el estado con el tamaño de la consulta
+          setPendientesCount(querySnapshot.size);
+          console.log("Notificaciones actualizadas: ", querySnapshot.size);
+        }
+      }, error => {
+        console.error("Error en el contador de tiempo real:", error);
+      });
 
+    // 3. Limpieza: Detiene el listener cuando el usuario sale de la app
     return () => unsub();
   }, []);
 
@@ -66,6 +71,7 @@ const MainTabs = () => {
         component={ProduccionScreen} 
         options={{
           tabBarLabel: 'Producción',
+          // 4. Lógica visual del Badge
           tabBarBadge: pendientesCount > 0 ? pendientesCount : null,
           tabBarBadgeStyle: { backgroundColor: '#E74C3C', color: 'white' },
           tabBarIcon: ({ color, size }) => <Icon name="factory" color={color} size={size} />,
