@@ -1,123 +1,109 @@
 import React, { useState, useEffect } from 'react';
 import { 
   View, Text, FlatList, StyleSheet, TouchableOpacity, 
-  Modal, SafeAreaView, Alert 
+  ActivityIndicator, Modal, Alert, ScrollView 
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import firestore from '@react-native-firebase/firestore';
 
 const ProduccionScreen = () => {
-  const [remisiones, setRemisiones] = useState([]);
-  const [maquinas, setMaquinas] = useState(['Presilladora', 'Plana', 'Fileteadora', 'Recubridora', 'Ojaladora']);
-  const [modalMaquinaVisible, setModalMaquinaVisible] = useState(false);
-  const [selectedRemision, setSelectedRemision] = useState(null);
+  const [tareas, setTareas] = useState([]);
+  const [maquinas, setMaquinas] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [modalMaquinas, setModalMaquinas] = useState(false);
+  const [tareaSeleccionada, setTareaSeleccionada] = useState(null);
 
-  // 1. CARGA DE DATOS EN TIEMPO REAL
   useEffect(() => {
-  const subscriber = firestore()
-    .collection('remisiones')
-    // Ordenamos por fecha para que las nuevas aparezcan arriba
-    .orderBy('fechaCreacion', 'desc') 
-    .onSnapshot(querySnapshot => {
-      const data = [];
-      querySnapshot?.forEach(doc => {
-        const docData = doc.data();
-        // Solo mostramos en producción si tiene un estado válido
-        if (docData.estadoProduccion) {
-          data.push({ ...docData, id: doc.id });
-        }
+    // 1. Escuchar remisiones en espera o proceso
+    const subscriber = firestore()
+      .collection('remisiones')
+      .where('estadoProduccion', 'in', ['Pendiente', 'En Proceso'])
+      .onSnapshot(querySnapshot => {
+        const data = [];
+        querySnapshot?.forEach(doc => data.push({ ...doc.data(), id: doc.id }));
+        setTareas(data);
+        setLoading(false);
       });
-      setRemisiones(data);
-    }, error => {
-        console.log("Error en tiempo real: ", error);
-    });
-    
-  return () => subscriber();
-}, []);
 
-  // 2. FUNCIONES DE ACTUALIZACIÓN
-  const actualizarEstado = async (id, nuevoEstado) => {
-    await firestore().collection('remisiones').doc(id).update({
-      estadoProduccion: nuevoEstado
-    });
-  };
-
-  const asignarMaquina = async (maquina) => {
-    if (selectedRemision) {
-      await firestore().collection('remisiones').doc(selectedRemision.id).update({
-        maquinaActual: maquina,
-        estadoProduccion: 'En Proceso' // Al asignar máquina, pasa a estar en proceso
+    // 2. Traer máquinas disponibles de la colección 'maquinas'
+    const subMaquinas = firestore()
+      .collection('maquinas')
+      .onSnapshot(snap => {
+        const m = [];
+        snap?.forEach(doc => m.push({ ...doc.data(), id: doc.id }));
+        setMaquinas(m);
       });
-      setModalMaquinaVisible(false);
+
+    return () => { subscriber(); subMaquinas(); };
+  }, []);
+
+  const asignarMaquina = async (nombreMaquina) => {
+    if (!tareaSeleccionada) return;
+
+    try {
+      await firestore().collection('remisiones').doc(tareaSeleccionada.id).update({
+        maquinaActual: nombreMaquina,
+        estadoProduccion: 'En Proceso' // Cambio de estado automático
+      });
+      setModalMaquinas(false);
+      Alert.alert("Éxito", `Tarea asignada a ${nombreMaquina}`);
+    } catch (error) {
+      Alert.alert("Error", "No se pudo asignar la máquina");
     }
   };
 
-  // 3. RENDER DE TARJETAS (Basado en tu imagen de referencia)
-  const renderItem = ({ item }) => {
-    // Configuración del semáforo
-    const getConfig = (estado) => {
-      switch(estado) {
-        case 'En Proceso': return { color: '#F1C40F', label: 'EN PROCESO' };
-        case 'Terminado': return { color: '#2ECC71', label: 'TERMINADO' };
-        case 'StandBy': return { color: '#E67E22', label: 'STANDBY' };
-        default: return { color: '#BDC3C7', label: 'PENDIENTE' };
+  const finalizarTarea = (id) => {
+    Alert.alert("Finalizar", "¿Confirmas que la producción está terminada?", [
+      { text: "No" },
+      { 
+        text: "Sí, Finalizar", 
+        onPress: () => firestore().collection('remisiones').doc(id).update({ estadoProduccion: 'Terminado' }) 
       }
-    };
+    ]);
+  };
 
-    const config = getConfig(item.estadoProduccion);
+  const renderItem = ({ item }) => {
+    // Color dinámico según el estado
+    const statusColor = item.estadoProduccion === 'En Proceso' ? '#3498db' : '#f1c40f';
 
     return (
       <View style={styles.card}>
-        {/* Barra de Estado (Semáforo) */}
-        <View style={[styles.statusBanner, { backgroundColor: config.color }]}>
-          <Text style={styles.statusHeaderText}>
-            <Icon name="circle" size={10} /> {config.label}
-          </Text>
+        <View style={[styles.statusHeader, { backgroundColor: statusColor }]}>
+          <Text style={styles.statusText}>● {item.estadoProduccion?.toUpperCase()}</Text>
         </View>
-
         <View style={styles.cardBody}>
-          <View style={styles.rowInfo}>
-            <View>
-              <Text style={styles.clienteTitle}>{item.cliente}</Text>
-              <Text style={styles.subText}>
-                {item.referencias?.length > 1 
-                  ? `${item.referencias.length} Referencias` 
-                  : `Ref: ${item.referencias?.[0]?.ref || 'N/A'}`} | #{item.numero}
+          <View style={styles.infoRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.clienteName}>{item.cliente}</Text>
+              <Text style={styles.refText}>
+                Ref: {item.referencias?.[0]?.ref || 'Varios'} | #{item.numero}
               </Text>
             </View>
-           <Text style={styles.cantTotal}>{item.totalPrendas || 0} unds</Text>
+            <Text style={styles.qtyText}>{item.totalPrendas || 0} unds</Text>
           </View>
-
-          {/* Caja de Máquina Actual */}
+          
           <View style={styles.machineBox}>
-            <Icon name="engine" size={20} color="#636e72" />
-            <Text style={styles.machineText}> Máquina: {item.maquinaActual || 'Pendiente'}</Text>
+            <Icon name="engine" size={20} color="#097678" />
+            <Text style={styles.machineText}>
+              Máquina: <Text style={{ fontWeight: 'bold' }}>{item.maquinaActual || 'No asignada'}</Text>
+            </Text>
           </View>
 
-          {/* Botones de Acción inferior */}
-          <View style={styles.actionRow}>
+          <View style={styles.actions}>
             <TouchableOpacity 
               style={styles.actionBtn} 
-              onPress={() => { setSelectedRemision(item); setModalMaquinaVisible(true); }}
+              onPress={() => { setTareaSeleccionada(item); setModalMaquinas(true); }}
             >
-              <Icon name="swap-horizontal" size={22} color="#3498DB" />
-              <Text style={styles.actionLabel}>Máquina</Text>
+              <Icon name="swap-horizontal" size={24} color="#3498db" />
+              <Text style={styles.actionLabel}>Asignar Máquina</Text>
             </TouchableOpacity>
 
             <TouchableOpacity 
-              style={styles.actionBtn} 
-              onPress={() => actualizarEstado(item.id, 'StandBy')}
+              style={styles.actionBtn}
+              onPress={() => finalizarTarea(item.id)}
             >
-              <Icon name="pause-circle-outline" size={22} color="#E67E22" />
-              <Text style={styles.actionLabel}>StandBy</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={styles.actionBtn} 
-              onPress={() => actualizarEstado(item.id, 'Terminado')}
-            >
-              <Icon name="check-all" size={22} color="#2ECC71" />
-              <Text style={styles.actionLabel}>Listo</Text>
+              <Icon name="check-circle" size={24} color="#27ae60" />
+              <Text style={styles.actionLabel}>Terminar</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -126,73 +112,76 @@ const ProduccionScreen = () => {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Panel de Producción</Text>
-        <Text style={styles.subtitle}>Gestión de procesos en taller</Text>
-      </View>
+    <View style={styles.container}>
+      <Text style={styles.title}>Panel de Producción</Text>
+      <Text style={styles.subtitle}>Gestión de procesos en taller</Text>
+      
+      {loading ? (
+        <ActivityIndicator size="large" color="#097678" style={{ marginTop: 50 }} />
+      ) : (
+        <FlatList
+          data={tareas}
+          renderItem={renderItem}
+          keyExtractor={item => item.id}
+          contentContainerStyle={{ padding: 15 }}
+          ListEmptyComponent={<Text style={{ textAlign: 'center', marginTop: 20 }}>No hay tareas pendientes</Text>}
+        />
+      )}
 
-      <FlatList 
-        data={remisiones}
-        renderItem={renderItem}
-        keyExtractor={item => item.id}
-        contentContainerStyle={{ padding: 15 }}
-      />
-
-      {/* MODAL DE SELECCIÓN DE MÁQUINA */}
-      <Modal visible={modalMaquinaVisible} transparent animationType="fade">
+      {/* Modal para seleccionar máquina */}
+      <Modal visible={modalMaquinas} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Asignar a Máquina</Text>
-            {maquinas.map((m, index) => (
-              <TouchableOpacity 
-                key={index} 
-                style={styles.maquinaOption}
-                onPress={() => asignarMaquina(m)}
-              >
-                <Text style={styles.maquinaOptionText}>{m}</Text>
-                <Icon name="chevron-right" size={20} color="#CCC" />
-              </TouchableOpacity>
-            ))}
+            <Text style={styles.modalTitle}>Seleccionar Máquina</Text>
+            <ScrollView>
+              {maquinas.map((m, index) => (
+                <TouchableOpacity 
+                  key={index} 
+                  style={styles.maquinaItem}
+                  onPress={() => asignarMaquina(m.nombre)}
+                >
+                  <Icon name="engine" size={20} color="#666" />
+                  <Text style={styles.maquinaItemText}>{m.nombre}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
             <TouchableOpacity 
               style={styles.btnCerrar} 
-              onPress={() => setModalMaquinaVisible(false)}
+              onPress={() => setModalMaquinas(false)}
             >
               <Text style={styles.btnCerrarText}>Cancelar</Text>
             </TouchableOpacity>
           </View>
         </View>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F4F7F6' },
-  header: { padding: 20, backgroundColor: '#FFF', borderBottomWidth: 1, borderColor: '#EEE' },
-  title: { fontSize: 24, fontWeight: 'bold', color: '#097678' },
-  subtitle: { fontSize: 14, color: '#666' },
-  // Estilos Tarjeta
-  card: { backgroundColor: '#FFF', borderRadius: 12, marginBottom: 20, elevation: 4, overflow: 'hidden', marginHorizontal: 5 },
-  statusBanner: { paddingVertical: 5, paddingHorizontal: 15, alignItems: 'center' },
-  statusHeaderText: { color: '#FFF', fontWeight: 'bold', fontSize: 12 },
+  title: { fontSize: 24, fontWeight: 'bold', color: '#097678', marginLeft: 20, marginTop: 20 },
+  subtitle: { fontSize: 14, color: '#666', marginLeft: 20, marginBottom: 10 },
+  card: { backgroundColor: '#FFF', borderRadius: 12, marginBottom: 15, elevation: 3, overflow: 'hidden', marginHorizontal: 5 },
+  statusHeader: { padding: 6, alignItems: 'center' },
+  statusText: { color: '#FFF', fontWeight: 'bold', fontSize: 11 },
   cardBody: { padding: 15 },
-  rowInfo: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  clienteTitle: { fontSize: 18, fontWeight: 'bold', color: '#2d3436' },
-  subText: { fontSize: 13, color: '#636e72' },
-  cantTotal: { fontSize: 18, fontWeight: 'bold', color: '#097678' },
-  machineBox: { backgroundColor: '#F8F9F9', padding: 10, borderRadius: 8, marginVertical: 12, flexDirection: 'row', alignItems: 'center', borderLeftWidth: 4, borderLeftColor: '#097678' },
-  machineText: { fontSize: 14, fontWeight: '600', color: '#2d3436' },
-  actionRow: { flexDirection: 'row', justifyContent: 'space-around', borderTopWidth: 1, borderTopColor: '#F0F0F0', paddingTop: 12 },
-  actionBtn: { alignItems: 'center' },
-  actionLabel: { fontSize: 11, color: '#636e72', marginTop: 4, fontWeight: '600' },
+  infoRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  clienteName: { fontSize: 18, fontWeight: 'bold', color: '#2D3436' },
+  refText: { fontSize: 13, color: '#666' },
+  qtyText: { fontSize: 20, fontWeight: 'bold', color: '#097678' },
+  machineBox: { flexDirection: 'row', backgroundColor: '#EBF5F5', padding: 12, borderRadius: 8, marginTop: 12, alignItems: 'center' },
+  machineText: { marginLeft: 10, color: '#2D3436' },
+  actions: { flexDirection: 'row', justifyContent: 'space-around', marginTop: 15, borderTopWidth: 1, borderTopColor: '#EEE', paddingTop: 10 },
+  actionBtn: { alignItems: 'center', flex: 1 },
+  actionLabel: { fontSize: 12, color: '#666', marginTop: 4, fontWeight: '500' },
   // Estilos Modal
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
-  modalContent: { backgroundColor: '#FFF', width: '85%', borderRadius: 20, padding: 20 },
-  modalTitle: { fontSize: 18, fontWeight: 'bold', color: '#097678', marginBottom: 15, textAlign: 'center' },
-  maquinaOption: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#EEE' },
-  maquinaOptionText: { fontSize: 16, color: '#2d3436' },
-  btnCerrar: { marginTop: 20, padding: 12, alignItems: 'center' },
+  modalContent: { backgroundColor: '#FFF', width: '80%', borderRadius: 15, padding: 20, maxHeight: '70%' },
+  modalTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 15, textAlign: 'center', color: '#097678' },
+  maquinaItem: { flexDirection: 'row', padding: 15, borderBottomWidth: 1, borderBottomColor: '#EEE', alignItems: 'center' },
+  maquinaItemText: { marginLeft: 15, fontSize: 16, color: '#333' },
+  btnCerrar: { marginTop: 15, padding: 10, alignItems: 'center' },
   btnCerrarText: { color: '#E17055', fontWeight: 'bold' }
 });
 

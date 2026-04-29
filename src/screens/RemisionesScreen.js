@@ -65,10 +65,27 @@ const RemisionesScreen = () => {
   };
 
   const confirmarEliminar = (id) => {
-    Alert.alert("Eliminar", "¿Deseas borrar esta remisión?", [
-      { text: "No" },
-      { text: "Sí", onPress: () => firestore().collection('remisiones').doc(id).delete() }
+    Alert.alert("Eliminar", "¿Deseas borrar esta remisión permanentemente?", [
+      { text: "Cancelar", style: "cancel" },
+      { 
+        text: "Sí, Eliminar", 
+        style: "destructive",
+        onPress: () => firestore().collection('remisiones').doc(id).delete() 
+      }
     ]);
+  };
+
+  const prepararEdicion = (item) => {
+    setEditandoId(item.id);
+    setForm({
+      numero: item.numero || '',
+      cliente: item.cliente || '',
+      estadoPago: item.estadoPago || 'Por Cobrar',
+      referencias: item.referencias || [],
+      insumos: item.insumos || [],
+      fechaCreacion: item.fechaCreacion // Mantenemos la fecha original
+    });
+    setModalVisible(true);
   };
 
   // --- MANEJO DE REFERENCIAS ---
@@ -85,7 +102,6 @@ const RemisionesScreen = () => {
     let newRefs = [...form.referencias];
     newRefs[index][field] = value;
     
-    // Cálculo automático de valor total por referencia
     if (field === 'cantidad' || field === 'valorUnitario') {
       const cant = parseFloat(newRefs[index].cantidad) || 0;
       const price = parseFloat(newRefs[index].valorUnitario) || 0;
@@ -108,75 +124,66 @@ const RemisionesScreen = () => {
     setForm({...form, insumos: newInsumos});
   };
 
- // Agrega esta función antes de guardarRemision para asegurar la limpieza
-const cerrarModal = () => {
-  setModalVisible(false);
-  setEditandoId(null);
-  setForm({ 
-    numero: '', 
-    cliente: '', 
-    estadoPago: 'Por Cobrar', 
-    referencias: [], 
-    insumos: [] 
-  });
-};
+  const cerrarModal = () => {
+    setModalVisible(false);
+    setEditandoId(null);
+    setForm({ 
+      numero: '', 
+      cliente: '', 
+      estadoPago: 'Por Cobrar', 
+      referencias: [], 
+      insumos: [] 
+    });
+  };
 
-const guardarRemision = async () => {
-  const numeroLimpio = form.numero ? String(form.numero).trim() : '';
+  const guardarRemision = async () => {
+    const numeroLimpio = form.numero ? String(form.numero).trim() : '';
 
-  if (!numeroLimpio || form.referencias.length === 0) {
-    Alert.alert("Error", "Completa el número y añade al menos una referencia");
-    return;
-  }
+    if (!numeroLimpio || form.referencias.length === 0) {
+      Alert.alert("Error", "Completa el número y añade al menos una referencia");
+      return;
+    }
 
-  try {
-    // 1. Validación de duplicados
-    if (!editandoId) {
-      const snapshot = await firestore()
-        .collection('remisiones')
-        .where('numero', '==', numeroLimpio)
-        .get();
+    try {
+      if (!editandoId) {
+        const snapshot = await firestore()
+          .collection('remisiones')
+          .where('numero', '==', numeroLimpio)
+          .get();
 
-      if (!snapshot.empty) {
-        Alert.alert("Número Duplicado", `La remisión #${numeroLimpio} ya existe.`);
-        return;
+        if (!snapshot.empty) {
+          Alert.alert("Número Duplicado", `La remisión #${numeroLimpio} ya existe.`);
+          return;
+        }
       }
+
+      const totalUnidades = form.referencias.reduce((acc, curr) => acc + (parseInt(curr.cantidad) || 0), 0);
+      const totalDinero = form.referencias.reduce((acc, curr) => acc + (parseFloat(curr.valorTotal) || 0), 0);
+      
+      const dataObj = {
+        ...form,
+        numero: numeroLimpio,
+        totalGeneral: totalDinero,
+        totalPrendas: totalUnidades,
+        estadoProduccion: editandoId ? (form.estadoProduccion || 'Pendiente') : 'Pendiente',
+        maquinaActual: editandoId ? (form.maquinaActual || 'Sin Asignar') : 'Sin Asignar',
+        fechaCreacion: editandoId ? form.fechaCreacion : firestore.FieldValue.serverTimestamp()
+      };
+
+      if (editandoId) {
+        await firestore().collection('remisiones').doc(editandoId).update(dataObj);
+        Alert.alert("Éxito", "Remisión actualizada correctamente.");
+      } else {
+        await firestore().collection('remisiones').add(dataObj);
+        Alert.alert("Éxito", `Remisión #${numeroLimpio} cargada.`);
+      }
+      
+      cerrarModal(); 
+
+    } catch (error) {
+      Alert.alert("Error", "No se pudo conectar con Firebase.");
     }
-
-    // 2. CÁLCULO TOTAL DE PRENDAS (Suma todas las cantidades de la lista)
-    const totalUnidades = form.referencias.reduce((acc, curr) => {
-      return acc + (parseInt(curr.cantidad) || 0);
-    }, 0);
-
-    // 3. CÁLCULO TOTAL DINERO (Suma todos los valores totales)
-    const totalDinero = form.referencias.reduce((acc, curr) => {
-      return acc + (parseFloat(curr.valorTotal) || 0);
-    }, 0);
-    
-    // 4. OBJETO DE DATOS ACTUALIZADO
-    const dataObj = {
-      ...form,
-      numero: numeroLimpio,
-      totalGeneral: totalDinero,    // Para el cobro
-      totalPrendas: totalUnidades,  // Para mostrar en el Panel de Producción
-      estadoProduccion: 'Pendiente',
-      maquinaActual: 'Sin Asignar',
-      fechaCreacion: editandoId ? form.fechaCreacion : firestore.FieldValue.serverTimestamp()
-    };
-
-    if (editandoId) {
-      await firestore().collection('remisiones').doc(editandoId).update(dataObj);
-    } else {
-      await firestore().collection('remisiones').add(dataObj);
-    }
-    
-    Alert.alert("Éxito", `Remisión #${numeroLimpio} cargada con ${totalUnidades} prendas.`);
-    cerrarModal(); 
-
-  } catch (error) {
-    Alert.alert("Error", "No se pudo conectar con Firebase.");
-  }
-};
+  };
 
   // --- RENDER DE TARJETA ---
   const renderItem = ({ item }) => (
@@ -187,14 +194,23 @@ const guardarRemision = async () => {
           <Text style={styles.subLabel}>Remisión: #{item.numero}</Text>
         </View>
         <View style={styles.headerIcons}>
-          <TouchableOpacity style={styles.iconAction}><Icon name="truck-delivery" size={24} color="#097678" /></TouchableOpacity>
+          <TouchableOpacity style={styles.iconAction}>
+            <Icon name="truck-delivery" size={24} color="#097678" />
+          </TouchableOpacity>
+          
           {userRole === 'gerente' && (
             <>
-              <TouchableOpacity style={styles.iconAction} onPress={() => { setForm(item); setEditandoId(item.id); setModalVisible(true); }}>
-                <Icon name="pencil" size={22} color="#097678" />
+              <TouchableOpacity 
+                style={styles.iconAction} 
+                onPress={() => prepararEdicion(item)}
+              >
+                <Icon name="pencil" size={24} color="#097678" />
               </TouchableOpacity>
-              <TouchableOpacity style={styles.iconAction} onPress={() => confirmarEliminar(item.id)}>
-                <Icon name="trash-can" size={22} color="#E17055" />
+              <TouchableOpacity 
+                style={styles.iconAction} 
+                onPress={() => confirmarEliminar(item.id)}
+              >
+                <Icon name="trash-can" size={24} color="#E17055" />
               </TouchableOpacity>
             </>
           )}
@@ -204,7 +220,6 @@ const guardarRemision = async () => {
       <View style={styles.divider} />
 
       <Text style={styles.sectionSubtitle}><Icon name="tshirt-crew" size={16} /> Prendas Pendientes:</Text>
-      {/* Se renderizan todas las referencias asociadas */}
       {item.referencias?.map((r, index) => (
         <View key={index} style={[styles.rowItem, { marginBottom: 5 }]}>
           <View style={{ flex: 2 }}>
@@ -260,7 +275,14 @@ const guardarRemision = async () => {
         contentContainerStyle={{ padding: 15, paddingBottom: 100 }}
       />
 
-      <TouchableOpacity style={styles.fab} onPress={() => { setEditandoId(null); setForm({ numero: '', cliente: '', estadoPago: 'Por Cobrar', referencias: [], insumos: [] }); setModalVisible(true); }}>
+      <TouchableOpacity 
+        style={styles.fab} 
+        onPress={() => { 
+          setEditandoId(null); 
+          setForm({ numero: '', cliente: '', estadoPago: 'Por Cobrar', referencias: [], insumos: [] }); 
+          setModalVisible(true); 
+        }}
+      >
         <Icon name="plus" size={30} color="#FFF" />
       </TouchableOpacity>
 
@@ -268,7 +290,7 @@ const guardarRemision = async () => {
         <SafeAreaView style={{ flex: 1 }}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>{editandoId ? 'Editar Remisión' : 'Nueva Remisión'}</Text>
-            <TouchableOpacity onPress={() => setModalVisible(false)}><Icon name="close" size={28} /></TouchableOpacity>
+            <TouchableOpacity onPress={cerrarModal}><Icon name="close" size={28} /></TouchableOpacity>
           </View>
           <ScrollView style={{ padding: 20 }}>
             <TextInput 
@@ -388,7 +410,7 @@ const guardarRemision = async () => {
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.btnSave} onPress={guardarRemision}>
-              <Text style={styles.btnSaveText}>Guardar</Text>
+              <Text style={styles.btnSaveText}>{editandoId ? 'Actualizar Cambios' : 'Guardar Remisión'}</Text>
             </TouchableOpacity>
           </ScrollView>
         </SafeAreaView>
@@ -406,7 +428,7 @@ const styles = StyleSheet.create({
   clienteHeader: { fontSize: 20, fontWeight: 'bold', color: '#097678' },
   subLabel: { fontSize: 12, color: '#666' },
   headerIcons: { flexDirection: 'row' },
-  iconAction: { marginLeft: 12 },
+  iconAction: { marginLeft: 15 }, // Un poco más de espacio entre iconos
   divider: { height: 1, backgroundColor: '#EEE', marginVertical: 12 },
   sectionSubtitle: { fontSize: 14, fontWeight: 'bold', color: '#333', marginBottom: 8, marginTop: 5 },
   rowItem: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4 },
