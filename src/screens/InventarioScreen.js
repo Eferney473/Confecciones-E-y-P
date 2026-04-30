@@ -23,11 +23,10 @@ const InventarioScreen = () => {
   const [form, setForm] = useState({ nombre: '', color: '', cantidad: '' });
 
   useEffect(() => {
-    // Escucha de Inventario FILTRADA para no mostrar items en cero
     const subInsumos = firestore()
       .collection('inventario')
-      .where('cantidad', '>', 0) // <--- ESTE ES EL CAMBIO CLAVE
-      .orderBy('cantidad', 'desc') // Opcional: ordenar por los que tienen más stock
+      .where('cantidad', '>', 0)
+      .orderBy('cantidad', 'desc')
       .onSnapshot(snap => {
         const data = [];
         snap?.forEach(doc => data.push({ ...doc.data(), id: doc.id }));
@@ -38,7 +37,6 @@ const InventarioScreen = () => {
         setLoading(false);
       });
 
-    // Escucha de Remisiones
     const subRemisiones = firestore()
       .collection('remisiones')
       .where('estadoProduccion', '!=', 'Terminado')
@@ -68,7 +66,7 @@ const InventarioScreen = () => {
     }
   };
 
-  const procesarMovimiento = async (tipo, destinoId = null, clienteNombre = '') => {
+  const procesarMovimiento = async (tipo, destinoId = null, clienteNombre = '', numeroRemision = '') => {
     const cant = parseInt(cantidadAfectar);
     if (!cant || cant <= 0 || cant > insumoSeleccionado.cantidad) {
       Alert.alert("Error", "Cantidad no válida o insuficiente en stock");
@@ -80,17 +78,23 @@ const InventarioScreen = () => {
       const insumoRef = firestore().collection('inventario').doc(insumoSeleccionado.id);
       const historialRef = firestore().collection('historial_inventario').doc();
 
+      // Descontar del inventario global
       batch.update(insumoRef, {
         cantidad: firestore.FieldValue.increment(-cant)
       });
 
       if (tipo === 'Asignar' && destinoId) {
         const remisionRef = firestore().collection('remisiones').doc(destinoId);
+        
+        // Cargamos el insumo a la remisión con la marca de "Inventario"
         batch.update(remisionRef, {
-          insumosInternos: firestore.FieldValue.arrayUnion({
-            nombreInsumo: insumoSeleccionado.nombre,
+          insumos: firestore.FieldValue.arrayUnion({
+            id: Date.now(), // ID único para el item en el array
+            nombre: insumoSeleccionado.nombre,
             color: insumoSeleccionado.color || 'N/A',
             cantidad: cant,
+            unidad: 'Und', // Puedes hacerlo dinámico si tienes el campo
+            origen: 'Inventario', // <--- CLAVE PARA TU PANTALLA DE REMISIONES
             fechaAsignacion: new Date().toISOString()
           })
         });
@@ -101,16 +105,17 @@ const InventarioScreen = () => {
         insumoId: insumoSeleccionado.id,
         nombreInsumo: insumoSeleccionado.nombre,
         cantidad: cant,
-        destino: tipo === 'Asignar' ? `Remisión #${destinoId} - ${clienteNombre}` : 'Devolución a Empresa',
+        destino: tipo === 'Asignar' ? `Remisión #${numeroRemision} - ${clienteNombre}` : 'Devolución a Empresa',
         usuario: auth().currentUser?.email || 'Admin',
         fecha: firestore.FieldValue.serverTimestamp()
       });
 
       await batch.commit();
-      Alert.alert("Éxito", "Movimiento registrado");
+      Alert.alert("Éxito", "Movimiento registrado correctamente");
       setModalAsignar(false);
       setCantidadAfectar('');
     } catch (error) {
+      console.log(error);
       Alert.alert("Error", "No se pudo completar la operación");
     }
   };
@@ -123,12 +128,16 @@ const InventarioScreen = () => {
         cantidad: parseInt(form.cantidad),
         ultimaActualizacion: firestore.FieldValue.serverTimestamp() 
     };
-    if (editandoId) {
-      await firestore().collection('inventario').doc(editandoId).update(datos);
-    } else {
-      await firestore().collection('inventario').add(datos);
+    try {
+        if (editandoId) {
+            await firestore().collection('inventario').doc(editandoId).update(datos);
+          } else {
+            await firestore().collection('inventario').add(datos);
+          }
+          cerrarModal();
+    } catch (e) {
+        Alert.alert("Error", "No se pudo guardar");
     }
-    cerrarModal();
   };
 
   const eliminarInsumo = (id, nombre) => {
@@ -158,7 +167,6 @@ const InventarioScreen = () => {
       </View>
 
       <View style={styles.actionsRow}>
-        {/* Único botón de acción que abre el modal compartido */}
         <TouchableOpacity 
           style={styles.actionBtn} 
           onPress={() => { setInsumoSeleccionado(item); setModalAsignar(true); }}
@@ -203,13 +211,14 @@ const InventarioScreen = () => {
         <Icon name="plus" size={30} color="#FFF" />
       </TouchableOpacity>
 
-      {/* MODAL ASIGNAR / DEVOLVER (CENTRALIZADO) */}
+      {/* MODAL ASIGNAR / DEVOLVER */}
       <Modal visible={modalAsignar} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Procesar: {insumoSeleccionado?.nombre}</Text>
             <TextInput 
               placeholder="Cantidad a mover" 
+              placeholderTextColor="#999"
               keyboardType="numeric"
               style={styles.input}
               value={cantidadAfectar}
@@ -218,7 +227,6 @@ const InventarioScreen = () => {
 
             <Text style={styles.sectionSubtitle}>¿A dónde se mueve?</Text>
             <ScrollView style={{maxHeight: 250, marginVertical: 10}}>
-              {/* Opción Devolver */}
               <TouchableOpacity 
                 style={[styles.remisionOption, {backgroundColor: '#FFF5F5', borderRadius: 8, marginBottom: 8}]}
                 onPress={() => procesarMovimiento('Devolver')}
@@ -229,12 +237,11 @@ const InventarioScreen = () => {
                 </View>
               </TouchableOpacity>
 
-              {/* Lista de Remisiones */}
               {remisiones.map(rem => (
                 <TouchableOpacity 
                   key={rem.id} 
                   style={styles.remisionOption}
-                  onPress={() => procesarMovimiento('Asignar', rem.id, rem.cliente)}
+                  onPress={() => procesarMovimiento('Asignar', rem.id, rem.cliente, rem.numero)}
                 >
                   <Text style={styles.remisionOptionText}>Asignar a: #{rem.numero} - {rem.cliente}</Text>
                   <Icon name="chevron-right" size={20} color="#097678" />
@@ -283,9 +290,9 @@ const InventarioScreen = () => {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>{editandoId ? 'Editar' : 'Nuevo'} Insumo</Text>
-            <TextInput placeholder="Nombre" style={styles.input} value={form.nombre} onChangeText={t => setForm({...form, nombre: t})} />
-            <TextInput placeholder="Color" style={styles.input} value={form.color} onChangeText={t => setForm({...form, color: t})} />
-            <TextInput placeholder="Cantidad" keyboardType="numeric" style={styles.input} value={form.cantidad} onChangeText={t => setForm({...form, cantidad: t})} />
+            <TextInput placeholder="Nombre" placeholderTextColor="#999" style={styles.input} value={form.nombre} onChangeText={t => setForm({...form, nombre: t})} />
+            <TextInput placeholder="Color" placeholderTextColor="#999" style={styles.input} value={form.color} onChangeText={t => setForm({...form, color: t})} />
+            <TextInput placeholder="Cantidad" placeholderTextColor="#999" keyboardType="numeric" style={styles.input} value={form.cantidad} onChangeText={t => setForm({...form, cantidad: t})} />
             <View style={{flexDirection: 'row', justifyContent: 'space-between', marginTop: 10}}>
                 <TouchableOpacity style={styles.btnCancel} onPress={cerrarModal}><Text>Cancelar</Text></TouchableOpacity>
                 <TouchableOpacity style={styles.btnSave} onPress={guardarInsumo}><Text style={{color: '#FFF'}}>Guardar</Text></TouchableOpacity>
@@ -297,6 +304,7 @@ const InventarioScreen = () => {
   );
 };
 
+// ... (Estilos permanecen igual)
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F4F7F6' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },

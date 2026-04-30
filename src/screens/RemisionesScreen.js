@@ -75,7 +75,14 @@ const RemisionesScreen = () => {
   const agregarInsumoVacio = () => {
     setForm({
       ...form,
-      insumos: [...form.insumos, { id: Date.now() + 1, nombre: '', color: '', cantidad: '', unidad: '' }]
+      insumos: [...form.insumos, { 
+        id: Date.now() + 1, 
+        nombre: '', 
+        color: '', 
+        cantidad: '', 
+        unidad: '',
+        origen: 'Cliente' // Marcamos por defecto como Cliente si se añade aquí
+      }]
     });
   };
 
@@ -108,6 +115,15 @@ const RemisionesScreen = () => {
     }
 
     try {
+      // --- VALIDACIÓN DE NÚMERO DUPLICADO ---
+      if (!editandoId) {
+        const query = await firestore().collection('remisiones').where('numero', '==', numeroLimpio).get();
+        if (!query.empty) {
+          Alert.alert("Error", "Ya existe una remisión con este número.");
+          return;
+        }
+      }
+
       const totalUnidades = form.referencias.reduce((acc, curr) => acc + (parseInt(curr.cantidad) || 0), 0);
       const totalDinero = form.referencias.reduce((acc, curr) => acc + (parseFloat(curr.valorTotal) || 0), 0);
       
@@ -168,9 +184,14 @@ const RemisionesScreen = () => {
 
       {item.insumos?.length > 0 && (
         <View style={{marginTop: 10}}>
-          <Text style={styles.sectionSubtitle}>Insumos Cliente:</Text>
+          <Text style={styles.sectionSubtitle}>Insumos Cargados:</Text>
           {item.insumos.map((ins, i) => (
-            <Text key={i} style={styles.insumoText}>- {ins.nombre}: {ins.cantidad} {ins.unidad}</Text>
+            <Text key={i} style={styles.insumoText}>
+              - {ins.nombre}: {ins.cantidad} {ins.unidad} 
+              <Text style={{fontWeight: 'bold', color: ins.origen === 'Inventario' ? '#097678' : '#666'}}>
+                 {ins.origen === 'Inventario' ? ' (INV)' : ' (C)'}
+              </Text>
+            </Text>
           ))}
         </View>
       )}
@@ -213,7 +234,7 @@ const RemisionesScreen = () => {
           </View>
           <ScrollView style={{ padding: 20 }}>
             <TextInput 
-              placeholder="Número" 
+              placeholder="Remision #" 
               placeholderTextColor="#666" 
               style={styles.input} 
               value={form.numero} 
@@ -247,7 +268,6 @@ const RemisionesScreen = () => {
                       value={r.color} 
                       onChangeText={t => updateRefField(i, 'color', t)} 
                     />
-                    {/* RESTAURADO: TALLA */}
                     <TextInput 
                       placeholder="Talla" 
                       placeholderTextColor= '#666'
@@ -277,7 +297,7 @@ const RemisionesScreen = () => {
                 </View>
               </View>
             ))}
-            <TouchableOpacity style={styles.btnAddRef} onPress={agregarReferenciaVacia}><Text style={{color: '#097678'}}>+ Añadir Prenda</Text></TouchableOpacity>
+            <TouchableOpacity style={styles.btnAddRef} onPress={agregarReferenciaVacia}><Text style={{color: '#000'}}>+ Añadir Prenda</Text></TouchableOpacity>
 
             <Text style={styles.sectionTitle}>2. Insumos del Cliente</Text>
             {form.insumos.map((ins, i) => (
@@ -311,7 +331,7 @@ const RemisionesScreen = () => {
                 </View>
               </View>
             ))}
-            <TouchableOpacity style={styles.btnAddRef} onPress={agregarInsumoVacio}><Text style={{color: '#097678'}}>+ Añadir Insumo</Text></TouchableOpacity>
+            <TouchableOpacity style={styles.btnAddRef} onPress={agregarInsumoVacio}><Text style={{color: '#000'}}>+ Añadir Insumo</Text></TouchableOpacity>
 
             <TouchableOpacity style={styles.btnSave} onPress={guardarRemision}><Text style={{color: '#FFF', fontWeight: 'bold'}}>GUARDAR REMISIÓN</Text></TouchableOpacity>
           </ScrollView>
