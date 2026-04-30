@@ -236,10 +236,24 @@ const RemisionesScreen = () => {
         <Text style={styles.historialText}>- No hay envíos registrados aún</Text>
       </View>
 
-      <Text style={styles.sectionSubtitle}> Insumos Recibidos:</Text>
+      <Text style={styles.sectionSubtitle}> Insumos Recibidos (Cliente):</Text>
       {item.insumos?.length > 0 ? item.insumos.map((ins, i) => (
         <Text key={i} style={styles.insumoText}>• {ins.nombre}: {ins.cantidad} ({ins.unidad})</Text>
       )) : <Text style={styles.insumoText}>Ninguno</Text>}
+
+      {/* === AQUÍ VA EL NUEVO BLOQUE DE INSUMOS DE TALLER === */}
+      {item.insumosInternos?.length > 0 && (
+        <View style={styles.insumosInternosBox}>
+          <Text style={styles.insumosInternosTitle}>
+            <Icon name="alert-decagram" size={14} color="#1565C0" /> Insumos de Taller (Inventario):
+          </Text>
+          {item.insumosInternos.map((ins, idx) => (
+            <Text key={idx} style={styles.insumoInternoText}>
+              • {ins.cantidad} {ins.nombreInsumo} - {ins.color}
+            </Text>
+          ))}
+        </View>
+      )}
 
       <View style={styles.cardFooter}>
         <Text style={styles.totalText}>Total: ${parseFloat(item.totalGeneral || 0).toLocaleString()}</Text>
@@ -453,7 +467,27 @@ const styles = StyleSheet.create({
   btnAddRefText: { color: '#097678', fontWeight: 'bold' },
   btnSave: { backgroundColor: '#097678', padding: 15, borderRadius: 10, alignItems: 'center', marginTop: 20, marginBottom: 40 },
   btnSaveText: { color: '#FFF', fontWeight: 'bold', fontSize: 16 },
-  sectionTitle: { fontSize: 14, fontWeight: 'bold', color: '#097678', marginVertical: 10 }
+  sectionTitle: { fontSize: 14, fontWeight: 'bold', color: '#097678', marginVertical: 10 },
+  insumosInternosBox: { 
+    backgroundColor: '#E3F2FD', 
+    padding: 10, 
+    borderRadius: 8, 
+    marginTop: 15,
+    borderLeftWidth: 4,
+    borderLeftColor: '#1E88E5'
+  },
+  insumosInternosTitle: { 
+    fontSize: 12, 
+    fontWeight: 'bold', 
+    color: '#1565C0',
+    marginBottom: 4
+  },
+  insumoInternoText: { 
+    fontSize: 12, 
+    color: '#1E88E5', 
+    marginLeft: 5,
+    fontWeight: '500'
+  },
 });
 
 export default RemisionesScreen;

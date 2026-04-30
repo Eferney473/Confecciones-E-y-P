@@ -3,7 +3,9 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import firestore from '@react-native-firebase/firestore'; // Agregado
+
+import firestore from '@react-native-firebase/firestore'; 
+import auth from '@react-native-firebase/auth';
 
 // Pantallas
 import SplashScreen from '../screens/SplashScreen';
@@ -20,58 +22,68 @@ const Tab = createBottomTabNavigator();
 
 const MainTabs = () => {
   const [pendientesCount, setPendientesCount] = useState(0);
+  const [userRole, setUserRole] = useState(null); 
+  
+  // Obtenemos el usuario actual de Firebase Auth
+  const user = auth().currentUser;
 
   useEffect(() => {
-    // 1. Creamos la referencia a la colección
-    // Usamos onSnapshot para que Firebase nos avise CUALQUIER cambio al instante
+    // Solo pedimos el rol si existe un usuario autenticado
+    const fetchRole = async () => {
+      if (user) {
+        try {
+          const doc = await firestore().collection('usuarios').doc(user.uid).get();
+          if (doc.exists) {
+            setUserRole(doc.data()?.rol);
+          }
+        } catch (error) {
+          console.error("Error obteniendo rol:", error);
+        }
+      }
+    };
+
+    fetchRole();
+
+    // Listener de notificaciones
     const unsub = firestore()
       .collection('remisiones')
-      .where('estadoProduccion', '==', 'Pendiente') // Filtro estricto
+      .where('estadoProduccion', '==', 'Pendiente')
       .onSnapshot(querySnapshot => {
         if (querySnapshot) {
-          // 2. Actualizamos el estado con el tamaño de la consulta
           setPendientesCount(querySnapshot.size);
-          console.log("Notificaciones actualizadas: ", querySnapshot.size);
         }
-      }, error => {
-        console.error("Error en el contador de tiempo real:", error);
-      });
+      }, error => console.log(error));
 
-    // 3. Limpieza: Detiene el listener cuando el usuario sale de la app
     return () => unsub();
-  }, []);
+  }, [user]); // Se ejecuta cada vez que el usuario cambie
 
   return (
     <Tab.Navigator
-      screenOptions={({ route }) => ({
+      screenOptions={{
         headerStyle: { backgroundColor: '#097678' },
         headerTintColor: '#FFF',
         headerTitleAlign: 'center',
         tabBarActiveTintColor: '#097678',
         tabBarInactiveTintColor: 'gray',
         tabBarStyle: { paddingBottom: 10 },
-      })}
+        tabBarHideOnKeyboard: true, // Esto oculta las pestañas cuando sale el teclado
+      }}
     >
       <Tab.Screen 
         name="Inicio" 
         component={HomeScreen} 
-        options={{ 
-          tabBarIcon: ({ color, size }) => <Icon name="home" size={size} color={color} /> 
-        }} 
+        options={{ tabBarIcon: ({ color, size }) => <Icon name="home" size={size} color={color} /> }} 
       />
       <Tab.Screen 
         name="Inventario" 
         component={InventarioScreen} 
-        options={{ 
-          tabBarIcon: ({ color, size }) => <Icon name="archive-outline" size={size} color={color} /> 
-        }} 
+        options={{ tabBarIcon: ({ color, size }) => <Icon name="archive-outline" size={size} color={color} /> }} 
       />
       <Tab.Screen 
         name="Produccion" 
         component={ProduccionScreen} 
         options={{
           tabBarLabel: 'Producción',
-          // 4. Lógica visual del Badge
           tabBarBadge: pendientesCount > 0 ? pendientesCount : null,
           tabBarBadgeStyle: { backgroundColor: '#E74C3C', color: 'white' },
           tabBarIcon: ({ color, size }) => <Icon name="factory" color={color} size={size} />,
@@ -80,24 +92,24 @@ const MainTabs = () => {
       <Tab.Screen 
         name="Remisiones" 
         component={RemisionesScreen} 
-        options={{ 
-          tabBarIcon: ({ color, size }) => <Icon name="truck-outline" size={size} color={color} /> 
-        }} 
+        options={{ tabBarIcon: ({ color, size }) => <Icon name="truck-outline" size={size} color={color} /> }} 
       />
       <Tab.Screen 
         name="Máquinas" 
         component={MaquinasScreen} 
-        options={{ 
-          tabBarIcon: ({ color, size }) => <Icon name="cog" size={size} color={color} /> 
-        }} 
+        options={{ tabBarIcon: ({ color, size }) => <Icon name="cog" size={size} color={color} /> }} 
       />
-      <Tab.Screen 
-        name="Mensajes" 
-        component={MensajesScreen} 
-        options={{ 
-          tabBarIcon: ({ color, size }) => <Icon name="chat-outline" size={size} color={color} /> 
-        }} 
-      />
+
+      {/* Solo mostramos la pestaña de Mensajes si el rol NO es operario */}
+      {userRole !== 'operario' && (
+        <Tab.Screen 
+          name="Mensajes" 
+          component={MensajesScreen} 
+          options={{ 
+            tabBarIcon: ({ color, size }) => <Icon name="chat-outline" size={size} color={color} /> 
+          }} 
+        />
+      )}
     </Tab.Navigator>
   );
 };
