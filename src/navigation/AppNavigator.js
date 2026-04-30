@@ -52,7 +52,8 @@ const MainTabs = () => {
         if (querySnapshot) {
           setPendientesCount(querySnapshot.size);
         }
-      }, error => console.log(error));
+      }
+    );
 
     return () => unsub();
   }, [user]); // Se ejecuta cada vez que el usuario cambie
