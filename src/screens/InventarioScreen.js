@@ -37,13 +37,22 @@ const InventarioScreen = () => {
         setLoading(false);
       });
 
+    // Escucha de Remisiones filtrada
     const subRemisiones = firestore()
       .collection('remisiones')
-      .where('estadoProduccion', '!=', 'Terminado')
+      // Filtramos para que SOLO aparezcan las remisiones que NO han sido entregadas o finalizadas
+      // Esto hará que la lista del modal coincida con lo que ves en la pantalla de Remisiones
+      .where('estadoProduccion', 'not-in', ['Lista para Entrega', 'Entregado']) 
       .onSnapshot(snap => {
         const data = [];
         snap?.forEach(doc => data.push({ ...doc.data(), id: doc.id }));
+        
+        // Opcional: Ordenar por número para que sea más fácil encontrarlas en la lista
+        data.sort((a, b) => b.numero - a.numero); 
+        
         setRemisiones(data);
+      }, error => {
+        console.log("Error cargando remisiones en inventario:", error);
       });
 
     return () => { subInsumos(); subRemisiones(); };

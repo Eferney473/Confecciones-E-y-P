@@ -16,6 +16,7 @@ import ProduccionScreen from '../screens/ProduccionScreen';
 import RemisionesScreen from '../screens/RemisionesScreen';
 import MaquinasScreen from '../screens/MaquinasScreen';
 import MensajesScreen from '../screens/MensajesScreen';
+import HistorialEntregasScreen from '../screens/HistorialEntregasScreen'; // Importamos la nueva pantalla
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -122,6 +123,12 @@ const AppNavigator = () => {
         <Stack.Screen name="Splash" component={SplashScreen} />
         <Stack.Screen name="Login" component={LoginScreen} />
         <Stack.Screen name="Main" component={MainTabs} /> 
+        <Stack.Screen name="HistorialEntregas" component={HistorialEntregasScreen} 
+        options={{ 
+          title: 'Historial de Salidas',
+          headerBackTitle: 'Volver' // Texto para el botón de regreso en iOS
+        }} 
+      />
       </Stack.Navigator>
     </NavigationContainer>
   );

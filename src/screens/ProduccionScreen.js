@@ -5,23 +5,20 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import firestore from '@react-native-firebase/firestore';
+import auth from '@react-native-firebase/auth';
 
-const ProduccionScreen = () => {
+const ProduccionScreen = ({ navigation }) => {
   const [tareas, setTareas] = useState([]);
   const [maquinas, setMaquinas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [modalMaquinas, setModalMaquinas] = useState(false);
   const [tareaSeleccionada, setTareaSeleccionada] = useState(null);
-  const [verTerminados, setVerTerminados] = useState(false);
 
   useEffect(() => {
-    const estadosFiltro = verTerminados 
-      ? ['Lista para Entrega'] 
-      : ['Pendiente', 'En Proceso', 'StandBy'];
-
+    // Ahora solo escuchamos lo que realmente está en fabricación
     const subscriber = firestore()
       .collection('remisiones')
-      .where('estadoProduccion', 'in', estadosFiltro)
+      .where('estadoProduccion', 'in', ['Pendiente', 'En Proceso', 'StandBy'])
       .onSnapshot(querySnapshot => {
         const data = [];
         querySnapshot?.forEach(doc => data.push({ ...doc.data(), id: doc.id }));
@@ -41,7 +38,7 @@ const ProduccionScreen = () => {
       });
 
     return () => { subscriber(); subMaquinas(); };
-  }, [verTerminados]);
+  }, []);
 
   const cambiarEstado = async (id, nuevoEstado) => {
     try {
@@ -66,34 +63,42 @@ const ProduccionScreen = () => {
     }
   };
 
-  const finalizarTarea = (id) => {
-    Alert.alert("Finalizar", "¿La producción está terminada y lista para entrega?", [
-      { text: "No" },
+  // --- FUNCIÓN FINAL: TERMINA Y ENVÍA AL HISTORIAL DE UNA VEZ ---
+  const finalizarYEntregarDirecto = (item) => {
+    Alert.alert("Finalizar Pedido", `¿Confirmas que la producción de #${item.numero} terminó y se entrega al cliente?`, [
+      { text: "Cancelar", style: "cancel" },
       { 
-        text: "Sí, Terminar", 
-        onPress: () => firestore().collection('remisiones').doc(id).update({ 
-          estadoProduccion: 'Lista para Entrega',
-          fechaFinalizado: firestore.FieldValue.serverTimestamp()
-        }) 
-      }
-    ]);
-  };
-
-  // --- NUEVA FUNCIÓN: ENTREGAR ---
-  const entregarRemision = (item) => {
-    Alert.alert("Confirmar Entrega", `¿Entregar Remisión #${item.numero} al cliente?`, [
-      { text: "Cancelar" },
-      { 
-        text: "Confirmar Entrega", 
+        text: "Sí, Terminar y Entregar", 
         onPress: async () => {
           try {
-            await firestore().collection('remisiones').doc(item.id).update({ 
+            const batch = firestore().batch();
+            const remisionRef = firestore().collection('remisiones').doc(item.id);
+            const historialRef = firestore().collection('historial_entregas').doc();
+
+            // 1. Desaparece de producción
+            batch.update(remisionRef, { 
               estadoProduccion: 'Entregado',
-              fechaEntregaEfectiva: firestore.FieldValue.serverTimestamp()
+              fechaFinalizado: firestore.FieldValue.serverTimestamp()
             });
-            Alert.alert("Éxito", "Pedido marcado como Entregado");
+
+            // 2. Aparece en el historial de entregas
+            batch.set(historialRef, {
+              remisionId: item.id,
+              numero: item.numero,
+              cliente: item.cliente,
+              unidades: item.totalPrendas || 0,
+              totalGeneral: item.totalGeneral || 0,
+              detalleReferencias: item.referencias || [],
+              insumosUtilizados: item.insumos || [],
+              entregadoPor: auth().currentUser?.email || 'Admin',
+              fechaEntrega: firestore.FieldValue.serverTimestamp(),
+              estadoPago: item.estadoPago || 'Pendiente'
+            });
+
+            await batch.commit();
+            Alert.alert("Éxito", "Pedido entregado. Revisa el historial para gestionar el cobro.");
           } catch (e) {
-            Alert.alert("Error", "No se pudo procesar la entrega");
+            Alert.alert("Error", "Hubo un problema al procesar la entrega.");
           }
         } 
       }
@@ -104,8 +109,7 @@ const ProduccionScreen = () => {
     const statusConfig = {
       'Pendiente': { color: '#f1c40f', icon: 'clock-outline' },
       'En Proceso': { color: '#3498db', icon: 'cog-sync' },
-      'StandBy': { color: '#e67e22', icon: 'pause-circle' },
-      'Lista para Entrega': { color: '#27ae60', icon: 'check-all' }
+      'StandBy': { color: '#e67e22', icon: 'pause-circle' }
     };
     const config = statusConfig[item.estadoProduccion] || { color: '#95a5a6', icon: 'help' };
 
@@ -139,52 +143,38 @@ const ProduccionScreen = () => {
             ))}
           </View>
           
-          {/* CAMBIO 1: Solo mostrar la máquina si NO está terminado */}
-          {!verTerminados && (
-            <View style={styles.machineBox}>
-              <Icon name="engine" size={18} color="#097678" />
-              <Text style={styles.machineText}>
-                Máquina: <Text style={{ fontWeight: 'bold' }}>{item.maquinaActual || 'No asignada'}</Text>
-              </Text>
-            </View>
-          )}
+          <View style={styles.machineBox}>
+            <Icon name="engine" size={18} color="#097678" />
+            <Text style={styles.machineText}>
+              Máquina: <Text style={{ fontWeight: 'bold' }}>{item.maquinaActual || 'No asignada'}</Text>
+            </Text>
+          </View>
 
-          {/* CAMBIO 2: Lógica de botones según el filtro */}
           <View style={styles.actions}>
-            {!verTerminados ? (
-              <>
-                {item.estadoProduccion !== 'StandBy' ? (
-                  <TouchableOpacity style={styles.actionBtn} onPress={() => cambiarEstado(item.id, 'StandBy')}>
-                    <Icon name="pause-circle-outline" size={24} color="#e67e22" />
-                    <Text style={styles.actionLabel}>Pausar</Text>
-                  </TouchableOpacity>
-                ) : (
-                  <TouchableOpacity style={styles.actionBtn} onPress={() => cambiarEstado(item.id, 'En Proceso')}>
-                    <Icon name="play-circle-outline" size={24} color="#3498db" />
-                    <Text style={styles.actionLabel}>Reanudar</Text>
-                  </TouchableOpacity>
-                )}
-
-                <TouchableOpacity 
-                  style={styles.actionBtn} 
-                  onPress={() => { setTareaSeleccionada(item); setModalMaquinas(true); }}
-                >
-                  <Icon name="swap-horizontal" size={24} color="#097678" />
-                  <Text style={styles.actionLabel}>Máquina</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity style={styles.actionBtn} onPress={() => finalizarTarea(item.id)}>
-                  <Icon name="check-circle" size={24} color="#27ae60" />
-                  <Text style={[styles.actionLabel, {color: '#27ae60', fontWeight: 'bold'}]}>TERMINAR</Text>
-                </TouchableOpacity>
-              </>
+            {item.estadoProduccion !== 'StandBy' ? (
+              <TouchableOpacity style={styles.actionBtn} onPress={() => cambiarEstado(item.id, 'StandBy')}>
+                <Icon name="pause-circle-outline" size={24} color="#e67e22" />
+                <Text style={styles.actionLabel}>Pausar</Text>
+              </TouchableOpacity>
             ) : (
-              /* BOTÓN PARA ENTREGAR (Solo visible en historial de listos) */
-              <TouchableOpacity style={[styles.actionBtn, {flexDirection: 'row', justifyContent: 'center'}]} onPress={() => entregarRemision(item)}>
-                <Icon name="truck-delivery" size={26} color="#27ae60" />
-                <Text style={[styles.actionLabel, {color: '#27ae60', fontSize: 16, marginLeft: 10, marginTop: 0}]}>ENTREGAR PEDIDO</Text>
+              <TouchableOpacity style={styles.actionBtn} onPress={() => cambiarEstado(item.id, 'En Proceso')}>
+                <Icon name="play-circle-outline" size={24} color="#3498db" />
+                <Text style={styles.actionLabel}>Reanudar</Text>
               </TouchableOpacity>
             )}
+
+            <TouchableOpacity 
+              style={styles.actionBtn} 
+              onPress={() => { setTareaSeleccionada(item); setModalMaquinas(true); }}
+            >
+              <Icon name="swap-horizontal" size={24} color="#097678" />
+              <Text style={styles.actionLabel}>Máquina</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.actionBtn} onPress={() => finalizarYEntregarDirecto(item)}>
+              <Icon name="check-circle" size={24} color="#27ae60" />
+              <Text style={[styles.actionLabel, {color: '#27ae60', fontWeight: 'bold'}]}>TERMINAR</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </View>
@@ -195,17 +185,17 @@ const ProduccionScreen = () => {
     <View style={styles.container}>
       <View style={styles.header}>
         <View>
-          <Text style={styles.title}>Panel de Producción</Text>
-          <Text style={styles.subtitle}>{verTerminados ? 'Listas para entrega' : 'Gestión de procesos activos'}</Text>
+          <Text style={styles.title}>Producción Activa</Text>
+          <Text style={styles.subtitle}>Gestión de procesos en taller</Text>
         </View>
+        
+        {/* Botón de Historial de Entregas (Navegación al historial) */}
         <TouchableOpacity 
-          style={[styles.filterBtn, verTerminados && styles.filterBtnActive]}
-          onPress={() => setVerTerminados(!verTerminados)}
+          style={styles.historyBtn} 
+          onPress={() => navigation.navigate('HistorialEntregas')}
         >
-          <Icon name={verTerminados ? "briefcase-check" : "truck-check"} size={20} color={verTerminados ? "#FFF" : "#097678"} />
-          <Text style={[styles.filterBtnText, verTerminados && {color: '#FFF'}]}>
-            {verTerminados ? "Activos" : "Por Entregar"}
-          </Text>
+          <Icon name="history" size={28} color="#097678" />
+          <Text style={styles.historyLabel}>Entregas</Text>
         </TouchableOpacity>
       </View>
       
@@ -217,7 +207,7 @@ const ProduccionScreen = () => {
           renderItem={renderItem}
           keyExtractor={item => item.id}
           contentContainerStyle={{ padding: 15 }}
-          ListEmptyComponent={<Text style={styles.emptyText}>No hay tareas en esta sección</Text>}
+          ListEmptyComponent={<Text style={styles.emptyText}>No hay procesos activos en este momento</Text>}
         />
       )}
 
@@ -247,11 +237,10 @@ const ProduccionScreen = () => {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F4F7F6' },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, marginTop: 20, marginBottom: 10 },
+  historyBtn: { alignItems: 'center', backgroundColor: '#FFF', padding: 8, borderRadius: 12, elevation: 2 },
+  historyLabel: { fontSize: 10, color: '#097678', fontWeight: 'bold' },
   title: { fontSize: 22, fontWeight: 'bold', color: '#097678' },
   subtitle: { fontSize: 13, color: '#666' },
-  filterBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, elevation: 2, borderWidth: 1, borderColor: '#097678' },
-  filterBtnActive: { backgroundColor: '#27ae60', borderColor: '#27ae60' },
-  filterBtnText: { marginLeft: 5, fontSize: 12, fontWeight: 'bold', color: '#097678' },
   card: { backgroundColor: '#FFF', borderRadius: 12, marginBottom: 15, elevation: 3, overflow: 'hidden', marginHorizontal: 5 },
   statusHeader: { padding: 6, alignItems: 'center' },
   statusText: { color: '#FFF', fontWeight: 'bold', fontSize: 11 },

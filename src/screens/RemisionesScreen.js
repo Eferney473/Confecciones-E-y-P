@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { 
   View, Text, FlatList, StyleSheet, TouchableOpacity, 
-  Alert, Modal, TextInput, ScrollView, SafeAreaView 
+  Alert, Modal, TextInput, ScrollView, SafeAreaView,
+  ActivityIndicator // Importado para el feedback de carga
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import firestore from '@react-native-firebase/firestore';
@@ -13,6 +14,7 @@ const RemisionesScreen = () => {
   const [modalVisible, setModalVisible] = useState(false);
   const [userRole, setUserRole] = useState('operario');
   const [editandoId, setEditandoId] = useState(null);
+  const [loading, setLoading] = useState(false); // NUEVO: Estado para control de carga
   
   const [form, setForm] = useState({
     numero: '',
@@ -81,7 +83,7 @@ const RemisionesScreen = () => {
         color: '', 
         cantidad: '', 
         unidad: '',
-        origen: 'Cliente' // Marcamos por defecto como Cliente si se añade aquí
+        origen: 'Cliente' 
       }]
     });
   };
@@ -114,12 +116,16 @@ const RemisionesScreen = () => {
       return;
     }
 
+    if (loading) return; // Evita ejecuciones múltiples
+    setLoading(true);
+
     try {
-      // --- VALIDACIÓN DE NÚMERO DUPLICADO ---
+      // --- VALIDACIÓN DE NÚMERO DUPLICADO CORREGIDA ---
       if (!editandoId) {
         const query = await firestore().collection('remisiones').where('numero', '==', numeroLimpio).get();
         if (!query.empty) {
-          Alert.alert("Error", "Ya existe una remisión con este número.");
+          Alert.alert("Aviso", "Ya existe una remisión con este número.");
+          setLoading(false);
           return;
         }
       }
@@ -142,10 +148,14 @@ const RemisionesScreen = () => {
       } else {
         await firestore().collection('remisiones').add(dataObj);
       }
+      
       setModalVisible(false);
       setEditandoId(null);
     } catch (error) {
-      Alert.alert("Error", "No se pudo guardar");
+      console.log(error);
+      Alert.alert("Error", "No se pudo guardar la información.");
+    } finally {
+      setLoading(false); // Restablece el estado de carga
     }
   };
 
@@ -333,7 +343,18 @@ const RemisionesScreen = () => {
             ))}
             <TouchableOpacity style={styles.btnAddRef} onPress={agregarInsumoVacio}><Text style={{color: '#000'}}>+ Añadir Insumo</Text></TouchableOpacity>
 
-            <TouchableOpacity style={styles.btnSave} onPress={guardarRemision}><Text style={{color: '#FFF', fontWeight: 'bold'}}>GUARDAR REMISIÓN</Text></TouchableOpacity>
+            {/* BOTÓN ACTUALIZADO CON LOADING Y DISABLED */}
+            <TouchableOpacity 
+              style={[styles.btnSave, loading && { opacity: 0.7 }]} 
+              onPress={guardarRemision}
+              disabled={loading}
+            >
+              {loading ? (
+                <ActivityIndicator color="#FFF" />
+              ) : (
+                <Text style={{color: '#FFF', fontWeight: 'bold'}}>GUARDAR REMISIÓN</Text>
+              )}
+            </TouchableOpacity>
           </ScrollView>
         </SafeAreaView>
       </Modal>
