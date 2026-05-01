@@ -1,84 +1,121 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  View, Text, FlatList, StyleSheet, TextInput, 
-  TouchableOpacity, KeyboardAvoidingView, Platform, SafeAreaView 
+  View, Text, FlatList, TextInput, TouchableOpacity, 
+  StyleSheet, SafeAreaView, KeyboardAvoidingView, Platform 
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
-import { useHeaderHeight } from '@react-navigation/elements'; // Opcional pero recomendado
+import auth from '@react-native-firebase/auth';
 
 const MensajesScreen = () => {
   const [mensajes, setMensajes] = useState([]);
   const [nuevoMensaje, setNuevoMensaje] = useState('');
   const user = auth().currentUser;
-  const headerHeight = useHeaderHeight(); // Detecta la altura del header azul
 
   useEffect(() => {
+    if (!user) return;
+
+    // Escuchar mensajes en tiempo real
     const subscriber = firestore()
-      .collection('chats')
+      .collection('mensajes')
       .orderBy('fecha', 'desc')
-      .onSnapshot(snap => {
-        const data = [];
-        snap?.forEach(doc => data.push({ ...doc.data(), id: doc.id }));
-        setMensajes(data);
+      .onSnapshot(querySnapshot => {
+        if (!querySnapshot) return;
+
+        const msgs = [];
+        querySnapshot.forEach(doc => {
+          msgs.push({ ...doc.data(), id: doc.id });
+          
+          // Lógica del "Visto": Si el mensaje es para mí y no está leído, marcarlo
+          const data = doc.data();
+          if (data.enviadoPor !== user.uid && data.leido === false) {
+            firestore().collection('mensajes').doc(doc.id).update({ leido: true });
+          }
+        });
+        setMensajes(msgs);
+      }, error => {
+        console.log("Error Firestore:", error);
       });
+
     return () => subscriber();
-  }, []);
+  }, [user]);
 
   const enviarMensaje = async () => {
     if (nuevoMensaje.trim().length === 0) return;
+
+    const mensajeData = {
+      texto: nuevoMensaje,
+      enviadoPor: user.uid,
+      userName: user.email.split('@')[0],
+      fecha: firestore.FieldValue.serverTimestamp(),
+      leido: false,
+    };
+
     try {
-      await firestore().collection('chats').add({
-        texto: nuevoMensaje,
-        remitenteId: user.uid,
-        nombre: user.email.split('@')[0],
-        fecha: firestore.FieldValue.serverTimestamp()
-      });
+      await firestore().collection('mensajes').add(mensajeData);
       setNuevoMensaje('');
-    } catch (e) { console.log(e); }
+    } catch (e) {
+      console.log("Error al enviar:", e);
+    }
+  };
+
+  const renderItem = ({ item }) => {
+    const esMio = item.enviadoPor === user.uid;
+    
+    // VALIDACIÓN CRÍTICA DE FECHA:
+    // Si el mensaje se acaba de enviar, item.fecha es null momentáneamente
+    let hora = "...";
+    if (item.fecha && item.fecha.toDate) {
+      hora = item.fecha.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+
+    return (
+      <View style={[styles.msgContainer, esMio ? styles.miMsg : styles.otroMsg]}>
+        {!esMio && <Text style={styles.senderName}>{item.userName}</Text>}
+        <Text style={styles.textMsg}>{item.texto}</Text>
+        <View style={styles.footerMsg}>
+          <Text style={styles.horaText}>{hora}</Text>
+          {esMio && (
+            <Icon 
+              name="check-all" 
+              size={16} 
+              color={item.leido ? "#34B7F1" : "#999"} 
+              style={{ marginLeft: 5 }}
+            />
+          )}
+        </View>
+      </View>
+    );
   };
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#F4F7F6' }}>
+    <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        // Este offset es vital: considera el header y el tab bar
-        keyboardVerticalOffset={Platform.OS === 'ios' ? headerHeight + 60 : headerHeight + 20}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 20: 100}
       >
-        <View style={{ flex: 1 }}>
-          <FlatList
-            data={mensajes}
-            keyExtractor={item => item.id}
-            renderItem={({ item }) => (
-              <View style={[
-                styles.bubble, 
-                item.remitenteId === user.uid ? styles.bubbleMe : styles.bubbleThem
-              ]}>
-                <Text style={[styles.text, item.remitenteId === user.uid && {color: '#FFF'}]}>
-                  {item.texto}
-                </Text>
-              </View>
-            )}
-            inverted
-            contentContainerStyle={{ padding: 15 }}
-          />
+        <FlatList
+          data={mensajes}
+          renderItem={renderItem}
+          keyExtractor={item => item.id}
+          inverted
+          contentContainerStyle={{ paddingHorizontal: 15, paddingVertical: 10 }}
+        />
 
-          <View style={styles.inputArea}>
-            <View style={styles.inputContainer}>
-              <TextInput
-                style={styles.input}
-                placeholder="Escribe un mensaje..."
-                value={nuevoMensaje}
-                onChangeText={setNuevoMensaje}
-                multiline
-                placeholderTextColor="#999"
-              />
-              <TouchableOpacity style={styles.sendBtn} onPress={enviarMensaje}>
-                <Icon name="send" size={20} color="#FFF" />
-              </TouchableOpacity>
-            </View>
+        <View style={styles.inputArea}>
+          <View style={styles.inputContainer}>
+            <TextInput
+              style={styles.input}
+              placeholder="Escribe un mensaje..."
+              placeholderTextColor="#666"
+              value={nuevoMensaje}
+              onChangeText={setNuevoMensaje}
+              multiline
+            />
+            <TouchableOpacity style={styles.sendBtn} onPress={enviarMensaje}>
+              <Icon name="send" size={24} color="#FFF" />
+            </TouchableOpacity>
           </View>
         </View>
       </KeyboardAvoidingView>
@@ -87,14 +124,18 @@ const MensajesScreen = () => {
 };
 
 const styles = StyleSheet.create({
-  bubble: { padding: 12, borderRadius: 15, marginBottom: 8, maxWidth: '80%' },
-  bubbleMe: { backgroundColor: '#097678', alignSelf: 'flex-end', borderBottomRightRadius: 2 },
-  bubbleThem: { backgroundColor: '#FFF', alignSelf: 'flex-start', borderBottomLeftRadius: 2 },
-  text: { fontSize: 15, color: '#333' },
-  inputArea: { padding: 10, backgroundColor: '#FFF', borderTopWidth: 1, borderColor: '#EEE' },
-  inputContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F0F2F5', borderRadius: 25, paddingHorizontal: 15 },
-  input: { flex: 1, color: '#000', maxHeight: 80, paddingVertical: 10 },
-  sendBtn: { backgroundColor: '#097678', width: 35, height: 35, borderRadius: 18, justifyContent: 'center', alignItems: 'center', marginLeft: 10 }
+  container: { flex: 1, backgroundColor: '#E5DDD5' },
+  msgContainer: { padding: 8, borderRadius: 10, marginBottom: 8, maxWidth: '85%' },
+  miMsg: { alignSelf: 'flex-end', backgroundColor: '#DCF8C6', borderTopRightRadius: 0 },
+  otroMsg: { alignSelf: 'flex-start', backgroundColor: '#FFF', borderTopLeftRadius: 0 },
+  senderName: { fontSize: 12, fontWeight: 'bold', color: '#097678', marginBottom: 2 },
+  textMsg: { fontSize: 16, color: '#000' },
+  footerMsg: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', marginTop: 2 },
+  horaText: { fontSize: 10, color: '#666' },
+  inputArea: { backgroundColor: '#FFF', paddingVertical: 5, paddingHorizontal: 10 },
+  inputContainer: { flexDirection: 'row', alignItems: 'center' },
+  input: { flex: 1, backgroundColor: '#F0F0F0', borderRadius: 20, paddingHorizontal: 15, paddingVertical: 8, marginRight: 8, maxHeight: 100, color: '#000' },
+  sendBtn: { backgroundColor: '#097678', width: 42, height: 42, borderRadius: 21, justifyContent: 'center', alignItems: 'center' },
 });
 
 export default MensajesScreen;
