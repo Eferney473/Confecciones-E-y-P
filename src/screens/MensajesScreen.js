@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { 
   View, Text, FlatList, TextInput, TouchableOpacity, 
-  StyleSheet, SafeAreaView, KeyboardAvoidingView, Platform 
+  StyleSheet, SafeAreaView, KeyboardAvoidingView, Platform, StatusBar 
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import firestore from '@react-native-firebase/firestore';
 import auth from '@react-native-firebase/auth';
 
-const MensajesScreen = () => {
+const MensajesScreen = ({ navigation }) => {
   const [mensajes, setMensajes] = useState([]);
   const [nuevoMensaje, setNuevoMensaje] = useState('');
   const user = auth().currentUser;
@@ -15,18 +15,14 @@ const MensajesScreen = () => {
   useEffect(() => {
     if (!user) return;
 
-    // Escuchar mensajes en tiempo real
     const subscriber = firestore()
       .collection('mensajes')
       .orderBy('fecha', 'desc')
       .onSnapshot(querySnapshot => {
         if (!querySnapshot) return;
-
         const msgs = [];
         querySnapshot.forEach(doc => {
           msgs.push({ ...doc.data(), id: doc.id });
-          
-          // Lógica del "Visto": Si el mensaje es para mí y no está leído, marcarlo
           const data = doc.data();
           if (data.enviadoPor !== user.uid && data.leido === false) {
             firestore().collection('mensajes').doc(doc.id).update({ leido: true });
@@ -61,28 +57,27 @@ const MensajesScreen = () => {
 
   const renderItem = ({ item }) => {
     const esMio = item.enviadoPor === user.uid;
-    
-    // VALIDACIÓN CRÍTICA DE FECHA:
-    // Si el mensaje se acaba de enviar, item.fecha es null momentáneamente
     let hora = "...";
     if (item.fecha && item.fecha.toDate) {
       hora = item.fecha.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     }
 
     return (
-      <View style={[styles.msgContainer, esMio ? styles.miMsg : styles.otroMsg]}>
-        {!esMio && <Text style={styles.senderName}>{item.userName}</Text>}
-        <Text style={styles.textMsg}>{item.texto}</Text>
-        <View style={styles.footerMsg}>
-          <Text style={styles.horaText}>{hora}</Text>
-          {esMio && (
-            <Icon 
-              name="check-all" 
-              size={16} 
-              color={item.leido ? "#34B7F1" : "#999"} 
-              style={{ marginLeft: 5 }}
-            />
-          )}
+      <View style={[styles.msgWrapper, esMio ? { alignItems: 'flex-end' } : { alignItems: 'flex-start' }]}>
+        <View style={[styles.msgContainer, esMio ? styles.miMsg : styles.otroMsg]}>
+          {!esMio && <Text style={styles.senderName}>{item.userName}</Text>}
+          <Text style={[styles.textMsg, esMio && { color: '#FFF' }]}>{item.texto}</Text>
+          <View style={styles.footerMsg}>
+            <Text style={[styles.horaText, esMio && { color: '#B2DFDB' }]}>{hora}</Text>
+            {esMio && (
+              <Icon 
+                name="check-all" 
+                size={15} 
+                color={item.leido ? "#34B7F1" : "#B2DFDB"} 
+                style={{ marginLeft: 4 }} 
+              />
+            )}
+          </View>
         </View>
       </View>
     );
@@ -90,17 +85,21 @@ const MensajesScreen = () => {
 
   return (
     <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor="#FFF" />
+      
+      {/* El behavior 'padding' en iOS y 'height' en Android suele ser la combinación ganadora */}
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 20: 100}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 110} 
       >
         <FlatList
           data={mensajes}
           renderItem={renderItem}
           keyExtractor={item => item.id}
           inverted
-          contentContainerStyle={{ paddingHorizontal: 15, paddingVertical: 10 }}
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
         />
 
         <View style={styles.inputArea}>
@@ -108,13 +107,18 @@ const MensajesScreen = () => {
             <TextInput
               style={styles.input}
               placeholder="Escribe un mensaje..."
-              placeholderTextColor="#666"
+              placeholderTextColor="#999"
               value={nuevoMensaje}
               onChangeText={setNuevoMensaje}
               multiline
             />
-            <TouchableOpacity style={styles.sendBtn} onPress={enviarMensaje}>
-              <Icon name="send" size={24} color="#FFF" />
+            {/* AQUÍ ESTÁ EL BOTÓN DE ENVIAR CON SU FUNCIÓN RESTAURADA */}
+            <TouchableOpacity 
+              style={[styles.sendBtn, !nuevoMensaje.trim() && { opacity: 0.5 }]} 
+              onPress={enviarMensaje}
+              disabled={!nuevoMensaje.trim()}
+            >
+              <Icon name="send" size={22} color="#FFF" />
             </TouchableOpacity>
           </View>
         </View>
@@ -124,18 +128,69 @@ const MensajesScreen = () => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#E5DDD5' },
-  msgContainer: { padding: 8, borderRadius: 10, marginBottom: 8, maxWidth: '85%' },
-  miMsg: { alignSelf: 'flex-end', backgroundColor: '#DCF8C6', borderTopRightRadius: 0 },
-  otroMsg: { alignSelf: 'flex-start', backgroundColor: '#FFF', borderTopLeftRadius: 0 },
-  senderName: { fontSize: 12, fontWeight: 'bold', color: '#097678', marginBottom: 2 },
-  textMsg: { fontSize: 16, color: '#000' },
-  footerMsg: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', marginTop: 2 },
-  horaText: { fontSize: 10, color: '#666' },
-  inputArea: { backgroundColor: '#FFF', paddingVertical: 5, paddingHorizontal: 10 },
-  inputContainer: { flexDirection: 'row', alignItems: 'center' },
-  input: { flex: 1, backgroundColor: '#F0F0F0', borderRadius: 20, paddingHorizontal: 15, paddingVertical: 8, marginRight: 8, maxHeight: 100, color: '#000' },
-  sendBtn: { backgroundColor: '#097678', width: 42, height: 42, borderRadius: 21, justifyContent: 'center', alignItems: 'center' },
+  container: { 
+    flex: 1, 
+    backgroundColor: '#F2F2F2' // Gris sólido profesional
+  },
+  listContent: { 
+    paddingHorizontal: 12, 
+    paddingVertical: 20 
+  },
+  msgWrapper: { 
+    width: '100%', 
+    marginBottom: 10 
+  },
+  msgContainer: { 
+    paddingHorizontal: 14, 
+    paddingVertical: 8, 
+    maxWidth: '80%', 
+    borderRadius: 15 
+  },
+  miMsg: { 
+    backgroundColor: '#097678', 
+    borderBottomRightRadius: 2, 
+    elevation: 2 
+  },
+  otroMsg: { 
+    backgroundColor: '#FFF', 
+    borderBottomLeftRadius: 2, 
+    elevation: 1 
+  },
+  textMsg: { fontSize: 15, color: '#333' },
+  senderName: { fontSize: 10, fontWeight: 'bold', color: '#097678', marginBottom: 2 },
+  footerMsg: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 4, alignItems: 'center' },
+  horaText: { fontSize: 9, color: '#999' },
+  inputArea: { 
+    paddingHorizontal: 10, 
+    paddingVertical: 10, 
+    backgroundColor: '#FFF', 
+    borderTopWidth: 1,
+    borderTopColor: '#EEE'
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F5F5F5',
+    borderRadius: 25,
+    paddingHorizontal: 15,
+    paddingVertical: 5,
+  },
+  input: { 
+    flex: 1, 
+    maxHeight: 100, 
+    color: '#333', 
+    fontSize: 16,
+    paddingVertical: 8
+  },
+  sendBtn: {
+    backgroundColor: '#097678',
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 5,
+  },
 });
 
 export default MensajesScreen;

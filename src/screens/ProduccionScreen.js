@@ -185,8 +185,8 @@ const ProduccionScreen = ({ navigation }) => {
     <View style={styles.container}>
       <View style={styles.header}>
         <View>
-          <Text style={styles.title}>Producción Activa</Text>
-          <Text style={styles.subtitle}>Gestión de procesos en taller</Text>
+          {/* <Text style={styles.title}>Producción Activa</Text> */}
+          <Text style={styles.title}>Gestión de procesos </Text>
         </View>
         
         {/* Botón de Historial de Entregas (Navegación al historial) */}

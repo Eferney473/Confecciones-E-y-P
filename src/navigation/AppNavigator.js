@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'; // Agregado
+import React, { useState, useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -16,7 +16,7 @@ import ProduccionScreen from '../screens/ProduccionScreen';
 import RemisionesScreen from '../screens/RemisionesScreen';
 import MaquinasScreen from '../screens/MaquinasScreen';
 import MensajesScreen from '../screens/MensajesScreen';
-import HistorialEntregasScreen from '../screens/HistorialEntregasScreen'; // Importamos la nueva pantalla
+import HistorialEntregasScreen from '../screens/HistorialEntregasScreen';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -24,12 +24,9 @@ const Tab = createBottomTabNavigator();
 const MainTabs = () => {
   const [pendientesCount, setPendientesCount] = useState(0);
   const [userRole, setUserRole] = useState(null); 
-  
-  // Obtenemos el usuario actual de Firebase Auth
   const user = auth().currentUser;
 
   useEffect(() => {
-    // Solo pedimos el rol si existe un usuario autenticado
     const fetchRole = async () => {
       if (user) {
         try {
@@ -42,10 +39,8 @@ const MainTabs = () => {
         }
       }
     };
-
     fetchRole();
 
-    // Listener de notificaciones
     const unsub = firestore()
       .collection('remisiones')
       .where('estadoProduccion', '==', 'Pendiente')
@@ -53,38 +48,45 @@ const MainTabs = () => {
         if (querySnapshot) {
           setPendientesCount(querySnapshot.size);
         }
-      }
-    );
+      });
 
     return () => unsub();
-  }, [user]); // Se ejecuta cada vez que el usuario cambie
+  }, [user]);
 
-  return (
+ return (
     <Tab.Navigator
       screenOptions={{
+        // QUITAMOS el headerShown: false de aquí para que las demás pantallas SÍ tengan barra
         headerStyle: { backgroundColor: '#097678' },
         headerTintColor: '#FFF',
         headerTitleAlign: 'center',
         tabBarActiveTintColor: '#097678',
         tabBarInactiveTintColor: 'gray',
         tabBarStyle: { paddingBottom: 10 },
-        tabBarHideOnKeyboard: true, // Esto oculta las pestañas cuando sale el teclado
+        tabBarHideOnKeyboard: true,
       }}
     >
       <Tab.Screen 
-        name="Inicio" 
+        name="Home" 
         component={HomeScreen} 
-        options={{ tabBarIcon: ({ color, size }) => <Icon name="home" size={size} color={color} /> }} 
+        options={{ 
+          headerShown: false, // <--- SOLO A ESTA le quitamos la barra del sistema
+          tabBarIcon: ({ color, size }) => <Icon name="home-outline" size={size} color={color} /> 
+        }}
       />
       <Tab.Screen 
         name="Inventario" 
         component={InventarioScreen} 
-        options={{ tabBarIcon: ({ color, size }) => <Icon name="archive-outline" size={size} color={color} /> }} 
+        options={{ 
+          title: 'Inventario de Insumos', // Puedes personalizar el título aquí
+          tabBarIcon: ({ color, size }) => <Icon name="archive-outline" size={size} color={color} /> 
+        }} 
       />
       <Tab.Screen 
         name="Produccion" 
         component={ProduccionScreen} 
         options={{
+          title: 'Producción ',
           tabBarLabel: 'Producción',
           tabBarBadge: pendientesCount > 0 ? pendientesCount : null,
           tabBarBadgeStyle: { backgroundColor: '#E74C3C', color: 'white' },
@@ -94,20 +96,26 @@ const MainTabs = () => {
       <Tab.Screen 
         name="Remisiones" 
         component={RemisionesScreen} 
-        options={{ tabBarIcon: ({ color, size }) => <Icon name="truck-outline" size={size} color={color} /> }} 
+        options={{ 
+          title: 'Remisiones',
+          tabBarIcon: ({ color, size }) => <Icon name="truck-outline" size={size} color={color} /> 
+        }} 
       />
       <Tab.Screen 
         name="Máquinas" 
         component={MaquinasScreen} 
-        options={{ tabBarIcon: ({ color, size }) => <Icon name="cog" size={size} color={color} /> }} 
+        options={{ 
+          title: 'Estado de Máquinas',
+          tabBarIcon: ({ color, size }) => <Icon name="cog" size={size} color={color} /> 
+        }} 
       />
 
-      {/* Solo mostramos la pestaña de Mensajes si el rol NO es operario */}
       {userRole !== 'operario' && (
         <Tab.Screen 
           name="Mensajes" 
           component={MensajesScreen} 
           options={{ 
+            title: 'Bandeja de Mensajes',
             tabBarIcon: ({ color, size }) => <Icon name="chat-outline" size={size} color={color} /> 
           }} 
         />
@@ -122,13 +130,18 @@ const AppNavigator = () => {
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         <Stack.Screen name="Splash" component={SplashScreen} />
         <Stack.Screen name="Login" component={LoginScreen} />
+        {/* Eliminamos el HomeScreen de aquí porque ya vive dentro de "Main" */}
         <Stack.Screen name="Main" component={MainTabs} /> 
-        <Stack.Screen name="HistorialEntregas" component={HistorialEntregasScreen} 
-        options={{ 
-          title: 'Historial de Salidas',
-          headerBackTitle: 'Volver' // Texto para el botón de regreso en iOS
-        }} 
-      />
+        <Stack.Screen 
+          name="HistorialEntregas" 
+          component={HistorialEntregasScreen} 
+          options={{ 
+            headerShown: true, // El historial sí suele llevar barra con botón volver
+            title: 'Historial de Salidas',
+            headerStyle: { backgroundColor: '#097678' },
+            headerTintColor: '#FFF',
+          }} 
+        />
       </Stack.Navigator>
     </NavigationContainer>
   );

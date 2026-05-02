@@ -109,8 +109,8 @@ const HistorialEntregasScreen = ({ navigation }) => {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Historial de Entregas</Text>
-        <Text style={styles.subtitle}>Gestión de despachos y cobros realizados</Text>
+        {/* <Text style={styles.title}>Historial de Entregas</Text> */}
+        <Text style={styles.title}>Despachos y cobros realizados</Text>
       </View>
 
       {loading ? (

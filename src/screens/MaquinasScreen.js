@@ -97,7 +97,7 @@ const MaquinasScreen = () => {
 
       <View style={styles.actions}>
         <TouchableOpacity style={styles.btnAction} onPress={() => { setEditandoId(item.id); setForm(item); setModalVisible(true); }}>
-          <Icon name="pencil-outline" size={20} color="#097678" />
+          <Icon name="pencil-outline" size={20} color="#ec9025" />
           <Text style={[styles.btnActionText, { color: '#097678' }]}>Editar</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.btnAction} onPress={() => eliminarMaquina(item.id)}>
@@ -182,7 +182,7 @@ const MaquinasScreen = () => {
           />
 
           <View style={styles.modalBtns}>
-            <TouchableOpacity style={styles.btnCancel} onPress={cerrarModal}><Text>Cancelar</Text></TouchableOpacity>
+            <TouchableOpacity style={styles.btnCancel} onPress={cerrarModal}><Text style={{color: '#098678', fontWeight: 'bold'}}>Cancelar</Text></TouchableOpacity>
             <TouchableOpacity style={styles.btnSave} onPress={guardarMaquina}><Text style={{ color: '#FFF' }}>Guardar</Text></TouchableOpacity>
           </View>
         </ScrollView>

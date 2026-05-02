@@ -1,12 +1,14 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  View, Text, FlatList, StyleSheet, TouchableOpacity, 
+ import React, { useState, useEffect } from 'react';
+import {
+  View, Text, FlatList, StyleSheet, TouchableOpacity,
   Alert, Modal, TextInput, ScrollView, SafeAreaView,
   ActivityIndicator // Importado para el feedback de carga
 } from 'react-native';
+
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import firestore from '@react-native-firebase/firestore';
 import auth from '@react-native-firebase/auth';
+
 
 const RemisionesScreen = () => {
   const [remisiones, setRemisiones] = useState([]);
@@ -15,14 +17,15 @@ const RemisionesScreen = () => {
   const [userRole, setUserRole] = useState('operario');
   const [editandoId, setEditandoId] = useState(null);
   const [loading, setLoading] = useState(false); // NUEVO: Estado para control de carga
-  
+ 
   const [form, setForm] = useState({
     numero: '',
     cliente: '',
     estadoPago: 'Por Cobrar',
     referencias: [],
-    insumos: [] 
+    insumos: []
   });
+
 
   useEffect(() => {
     const fetchUserRole = async () => {
@@ -34,6 +37,7 @@ const RemisionesScreen = () => {
             }
           } catch (e) { console.log("Error rol:", e); }
     };
+
     fetchUserRole();
 
     const subscriber = firestore()
@@ -46,22 +50,25 @@ const RemisionesScreen = () => {
         setRemisiones(data);
       }, err => console.log("Error:", err));
 
+
     return () => subscriber();
   }, []);
 
-  const remisionesFiltradas = remisiones.filter(r => 
-    (r.numero && String(r.numero).includes(busqueda)) || 
+  const remisionesFiltradas = remisiones.filter(r =>
+    (r.numero && String(r.numero).includes(busqueda)) ||
     (r.cliente && r.cliente.toLowerCase().includes(busqueda.toLowerCase()))
   );
+
 
   const agregarReferenciaVacia = () => {
     setForm({
       ...form,
-      referencias: [...form.referencias, { 
-        id: Date.now(), ref: '', color: '', tallas: '', cantidad: '', valorUnitario: '', valorTotal: 0 
+      referencias: [...form.referencias, {
+        id: Date.now(), ref: '', color: '', tallas: '', cantidad: '', valorUnitario: '', valorTotal: 0
       }]
     });
   };
+
 
   const updateRefField = (index, field, value) => {
     let newRefs = [...form.referencias];
@@ -71,28 +78,33 @@ const RemisionesScreen = () => {
       const price = parseFloat(newRefs[index].valorUnitario) || 0;
       newRefs[index].valorTotal = cant * price;
     }
+
     setForm({...form, referencias: newRefs});
+
   };
+
 
   const agregarInsumoVacio = () => {
     setForm({
       ...form,
-      insumos: [...form.insumos, { 
-        id: Date.now() + 1, 
-        nombre: '', 
-        color: '', 
-        cantidad: '', 
+      insumos: [...form.insumos, {
+        id: Date.now() + 1,
+        nombre: '',
+        color: '',
+        cantidad: '',
         unidad: '',
-        origen: 'Cliente' 
+        origen: 'Cliente'
       }]
     });
   };
+
 
   const updateInsumoField = (index, field, value) => {
     let newInsumos = [...form.insumos];
     newInsumos[index][field] = value;
     setForm({...form, insumos: newInsumos});
   };
+
 
   const prepararEdicion = (item) => {
     setEditandoId(item.id);
@@ -104,10 +116,12 @@ const RemisionesScreen = () => {
       insumos: item.insumos || [],
       estadoProduccion: item.estadoProduccion,
       maquinaActual: item.maquinaActual,
-      fechaCreacion: item.fechaCreacion 
+      fechaCreacion: item.fechaCreacion
     });
+
     setModalVisible(true);
   };
+
 
   const guardarRemision = async () => {
     const numeroLimpio = form.numero ? String(form.numero).trim() : '';
@@ -132,7 +146,7 @@ const RemisionesScreen = () => {
 
       const totalUnidades = form.referencias.reduce((acc, curr) => acc + (parseInt(curr.cantidad) || 0), 0);
       const totalDinero = form.referencias.reduce((acc, curr) => acc + (parseFloat(curr.valorTotal) || 0), 0);
-      
+     
       const dataObj = {
         ...form,
         numero: numeroLimpio,
@@ -148,7 +162,8 @@ const RemisionesScreen = () => {
       } else {
         await firestore().collection('remisiones').add(dataObj);
       }
-      
+
+
       setModalVisible(false);
       setEditandoId(null);
     } catch (error) {
@@ -158,6 +173,7 @@ const RemisionesScreen = () => {
       setLoading(false); // Restablece el estado de carga
     }
   };
+
 
   const renderItem = ({ item }) => (
     <View style={styles.card}>
@@ -170,7 +186,7 @@ const RemisionesScreen = () => {
           {userRole === 'gerente' && (
             <>
               <TouchableOpacity style={styles.iconAction} onPress={() => prepararEdicion(item)}>
-                <Icon name="pencil" size={24} color="#097678" />
+                <Icon name="pencil" size={24} color="#ec9025" />
               </TouchableOpacity>
               <TouchableOpacity style={styles.iconAction} onPress={() => {
                 Alert.alert("Eliminar", "¿Borrar?", [
@@ -184,6 +200,7 @@ const RemisionesScreen = () => {
         </View>
       </View>
 
+
       <View style={styles.divider} />
       <Text style={styles.sectionSubtitle}>Prendas:</Text>
       {item.referencias?.map((r, i) => (
@@ -192,12 +209,13 @@ const RemisionesScreen = () => {
         </Text>
       ))}
 
+
       {item.insumos?.length > 0 && (
         <View style={{marginTop: 10}}>
           <Text style={styles.sectionSubtitle}>Insumos Cargados:</Text>
           {item.insumos.map((ins, i) => (
             <Text key={i} style={styles.insumoText}>
-              - {ins.nombre}: {ins.cantidad} {ins.unidad} 
+              - {ins.nombre}: {ins.cantidad} {ins.unidad}
               <Text style={{fontWeight: 'bold', color: ins.origen === 'Inventario' ? '#097678' : '#666'}}>
                  {ins.origen === 'Inventario' ? ' (INV)' : ' (C)'}
               </Text>
@@ -205,6 +223,7 @@ const RemisionesScreen = () => {
           ))}
         </View>
       )}
+
 
       <View style={styles.cardFooter}>
         <Text style={styles.totalText}>Total: ${parseFloat(item.totalGeneral || 0).toLocaleString()}</Text>
@@ -216,16 +235,16 @@ const RemisionesScreen = () => {
     <SafeAreaView style={styles.container}>
       <View style={styles.searchBar}>
         <Icon name="magnify" size={24} color="#666" />
-        <TextInput 
-          placeholder="Buscar..." 
+        <TextInput
+          placeholder="Buscar..."
           placeholderTextColor= '#666'
           color= '#000'
-          style={{flex: 1, marginLeft: 10}} 
-          onChangeText={setBusqueda} 
+          style={{flex: 1, marginLeft: 10}}
+          onChangeText={setBusqueda}
         />
       </View>
 
-      <FlatList 
+      <FlatList
         data={remisionesFiltradas}
         renderItem={renderItem}
         keyExtractor={item => item.id}
@@ -239,130 +258,237 @@ const RemisionesScreen = () => {
       <Modal visible={modalVisible} animationType="slide">
         <SafeAreaView style={{ flex: 1 }}>
           <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>{editandoId ? 'Editar' : 'Nueva'}</Text>
+            <Text style={styles.modalTitle}>{editandoId ? 'Editar' : 'Nueva Remisión'}</Text>
             <TouchableOpacity onPress={() => setModalVisible(false)}><Icon name="close" size={28} /></TouchableOpacity>
           </View>
+
           <ScrollView style={{ padding: 20 }}>
-            <TextInput 
-              placeholder="Remision #" 
-              placeholderTextColor="#666" 
-              style={styles.input} 
-              value={form.numero} 
-              onChangeText={t => setForm({...form, numero: t})} 
+            <TextInput
+              placeholder="Remision #"
+              placeholderTextColor="#666"
+              style={styles.input}
+              value={form.numero}
+              onChangeText={t => setForm({...form, numero: t})}
             />
-            <TextInput 
-              placeholder="Cliente" 
-              placeholderTextColor="#666" 
-              style={styles.input} 
-              value={form.cliente} 
-              onChangeText={t => setForm({...form, cliente: t})} 
+
+            <TextInput
+              placeholder="Cliente"
+              placeholderTextColor="#666"
+              style={styles.input}
+              value={form.cliente}
+              onChangeText={t => setForm({...form, cliente: t})}
             />
 
             <Text style={styles.sectionTitle}>1. Prendas / Referencias</Text>
+
             {form.referencias.map((r, i) => (
+
               <View key={r.id} style={styles.refForm}>
-                <TextInput 
-                  placeholder="Referencia" 
+
+                <TextInput
+
+                  placeholder="Referencia"
+
                   placeholderTextColor= '#666'
+
                   color= '#000'
-                  style={styles.inputSmall} 
-                  value={r.ref} 
-                  onChangeText={t => updateRefField(i, 'ref', t)} 
+
+                  style={styles.inputSmall}
+
+                  value={r.ref}
+
+                  onChangeText={t => updateRefField(i, 'ref', t)}
+
                 />
+
                 <View style={{flexDirection: 'row', justifyContent: 'space-between', marginTop: 10}}>
-                    <TextInput 
-                      placeholder="Color" 
+
+                    <TextInput
+
+                      placeholder="Color"
+
                       placeholderTextColor= '#666'
+
                       color= '#000'
-                      style={[styles.inputSmall, {width: '22%'}]} 
-                      value={r.color} 
-                      onChangeText={t => updateRefField(i, 'color', t)} 
+
+                      style={[styles.inputSmall, {width: '22%'}]}
+
+                      value={r.color}
+
+                      onChangeText={t => updateRefField(i, 'color', t)}
+
                     />
-                    <TextInput 
-                      placeholder="Talla" 
+
+                    <TextInput
+
+                      placeholder="Talla"
+
                       placeholderTextColor= '#666'
+
                       color= '#000'
-                      style={[styles.inputSmall, {width: '22%'}]} 
-                      value={r.tallas} 
-                      onChangeText={t => updateRefField(i, 'tallas', t)} 
+
+                      style={[styles.inputSmall, {width: '22%'}]}
+
+                      value={r.tallas}
+
+                      onChangeText={t => updateRefField(i, 'tallas', t)}
+
                     />
-                    <TextInput 
-                      placeholder="Cant" 
+
+                    <TextInput
+
+                      placeholder="Cant"
+
                       placeholderTextColor= '#666'
+
                       color= '#000'
-                      keyboardType="numeric" 
-                      style={[styles.inputSmall, {width: '22%'}]} 
-                      value={r.cantidad.toString()} 
-                      onChangeText={t => updateRefField(i, 'cantidad', t)} 
+
+                      keyboardType="numeric"
+
+                      style={[styles.inputSmall, {width: '22%'}]}
+
+                      value={r.cantidad.toString()}
+
+                      onChangeText={t => updateRefField(i, 'cantidad', t)}
+
                     />
-                    <TextInput 
-                      placeholder="V. Unit" 
+
+                    <TextInput
+
+                      placeholder="V. Unit"
+
                       placeholderTextColor= '#666'
+
                       color= '#000'
-                      keyboardType="numeric" 
-                      style={[styles.inputSmall, {width: '22%'}]} 
-                      value={r.valorUnitario.toString()} 
-                      onChangeText={t => updateRefField(i, 'valorUnitario', t)} 
+
+                      keyboardType="numeric"
+
+                      style={[styles.inputSmall, {width: '22%'}]}
+
+                      value={r.valorUnitario.toString()}
+
+                      onChangeText={t => updateRefField(i, 'valorUnitario', t)}
+
                     />
+
                 </View>
+
               </View>
+
             ))}
+
             <TouchableOpacity style={styles.btnAddRef} onPress={agregarReferenciaVacia}><Text style={{color: '#000'}}>+ Añadir Prenda</Text></TouchableOpacity>
 
+
+
             <Text style={styles.sectionTitle}>2. Insumos del Cliente</Text>
+
             {form.insumos.map((ins, i) => (
+
               <View key={ins.id} style={styles.refForm}>
-                <TextInput 
-                  placeholder="Nombre Insumo" 
+
+                <TextInput
+
+                  placeholder="Nombre Insumo"
+
                   placeholderTextColor= '#666'
+
                   color= '#000'
-                  style={styles.inputSmall} 
-                  value={ins.nombre} 
-                  onChangeText={t => updateInsumoField(i, 'nombre', t)} 
+
+                  style={styles.inputSmall}
+
+                  value={ins.nombre}
+
+                  onChangeText={t => updateInsumoField(i, 'nombre', t)}
+
                 />
+
                 <View style={{flexDirection: 'row', justifyContent: 'space-between', marginTop: 10}}>
-                    <TextInput 
-                      placeholder="Cant" 
+
+                    <TextInput
+
+                      placeholder="Cant"
+
                       placeholderTextColor= '#666'
+
                       color= '#000'
-                      keyboardType="numeric" 
-                      style={[styles.inputSmall, {width: '45%'}]} 
-                      value={ins.cantidad} 
-                      onChangeText={t => updateInsumoField(i, 'cantidad', t)} 
+
+                      keyboardType="numeric"
+
+                      style={[styles.inputSmall, {width: '45%'}]}
+
+                      value={ins.cantidad}
+
+                      onChangeText={t => updateInsumoField(i, 'cantidad', t)}
+
                     />
-                    <TextInput 
-                      placeholder="Unidad" 
+
+                    <TextInput
+
+                      placeholder="Unidad"
+
                       placeholderTextColor= '#666'
+
                       color= '#000'
-                      style={[styles.inputSmall, {width: '45%'}]} 
-                      value={ins.unidad} 
-                      onChangeText={t => updateInsumoField(i, 'unidad', t)} 
+
+                      style={[styles.inputSmall, {width: '45%'}]}
+
+                      value={ins.unidad}
+
+                      onChangeText={t => updateInsumoField(i, 'unidad', t)}
+
                     />
+
                 </View>
+
               </View>
+
             ))}
+
             <TouchableOpacity style={styles.btnAddRef} onPress={agregarInsumoVacio}><Text style={{color: '#000'}}>+ Añadir Insumo</Text></TouchableOpacity>
 
+
+
             {/* BOTÓN ACTUALIZADO CON LOADING Y DISABLED */}
-            <TouchableOpacity 
-              style={[styles.btnSave, loading && { opacity: 0.7 }]} 
+
+            <TouchableOpacity
+
+              style={[styles.btnSave, loading && { opacity: 0.7 }]}
+
               onPress={guardarRemision}
+
               disabled={loading}
+
             >
+
               {loading ? (
+
                 <ActivityIndicator color="#FFF" />
+
               ) : (
+
                 <Text style={{color: '#FFF', fontWeight: 'bold'}}>GUARDAR REMISIÓN</Text>
+
               )}
+
             </TouchableOpacity>
+
           </ScrollView>
+
         </SafeAreaView>
+
       </Modal>
+
     </SafeAreaView>
+
   );
+
 };
 
+
+
 const styles = StyleSheet.create({
+
     container: { flex: 1, backgroundColor: '#F4F7F6' },
     searchBar: { flexDirection: 'row', backgroundColor: '#FFF', margin: 15, padding: 10, borderRadius: 10, alignItems: 'center' },
     card: { backgroundColor: '#FFF', borderRadius: 15, padding: 15, marginBottom: 20, elevation: 4, marginHorizontal: 15 },
@@ -384,6 +510,9 @@ const styles = StyleSheet.create({
     btnAddRef: { backgroundColor: '#EEE', padding: 10, borderRadius: 8, alignItems: 'center', marginBottom: 20 },
     btnSave: { backgroundColor: '#097678', padding: 15, borderRadius: 10, alignItems: 'center', marginTop: 20, marginBottom: 40 },
     sectionTitle: { fontSize: 15, fontWeight: 'bold', color: '#097678', marginVertical: 15 },
+
 });
+
+
 
 export default RemisionesScreen;

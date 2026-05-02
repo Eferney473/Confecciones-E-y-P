@@ -1,5 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, SafeAreaView } from 'react-native';
+import { 
+  View, 
+  Text, 
+  ScrollView, 
+  StyleSheet, 
+  TouchableOpacity, 
+  SafeAreaView, 
+  StatusBar, 
+  Platform 
+} from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
@@ -42,20 +51,16 @@ const HomeScreen = ({ navigation }) => {
         if (data.estadoProduccion !== 'Entregado') {
           activas++;
           const cantidad = parseInt(data.totalPrendas, 10);
-          if (!isNaN(cantidad)) {
-            total += cantidad;
-          }
+          if (!isNaN(cantidad)) total += cantidad;
         }
       });
       setStats(prev => ({ ...prev, prendasDia: total, remisionesActivas: activas }));
-    }, error => console.log('Error Remisiones:', error));
+    });
 
     const subInventario = firestore().collection('inventario').onSnapshot(snap => {
       const criticos = [];
       snap?.forEach(doc => {
-        if (parseInt(doc.data().cantidad || 0, 10) <= 10) {
-          criticos.push(doc.data().nombre);
-        }
+        if (parseInt(doc.data().cantidad || 0, 10) <= 10) criticos.push(doc.data().nombre);
       });
       setStats(prev => ({ ...prev, insumosCriticos: criticos.length, insumosNombres: criticos.slice(0, 2).join(', ') }));
     });
@@ -64,9 +69,7 @@ const HomeScreen = ({ navigation }) => {
       const t = [];
       snap?.forEach(doc => {
         const est = doc.data().estado?.toLowerCase();
-        if (est && (est.includes('mantenimiento') || est.includes('falla'))) {
-          t.push(doc.data().tipo);
-        }
+        if (est && (est.includes('mantenimiento') || est.includes('falla'))) t.push(doc.data().tipo);
       });
       setStats(prev => ({ ...prev, maquinasTaller: t.length, maquinasNombres: t.join(', ') || 'Operativas' }));
     });
@@ -81,8 +84,6 @@ const HomeScreen = ({ navigation }) => {
             mensajesSinLeer: m.enviadoPor !== user.uid && m.leido === false,
           }));
         }
-      }, error => {
-        console.log('Error Firestore:', error);
       });
 
     return () => {
@@ -92,84 +93,110 @@ const HomeScreen = ({ navigation }) => {
 
   const handleLogout = () => auth().signOut().then(() => navigation.replace('Login'));
 
-  return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.toolbar}>
-        <Text style={styles.toolbarTitle}>BodyLine Control</Text>
-        <TouchableOpacity style={styles.notifBtn} onPress={() => navigation.navigate('Mensajes')}>
-          <Icon name="chat-outline" size={26} color="#FFF" />
-          {stats.mensajesSinLeer && <View style={styles.badge} />}
-        </TouchableOpacity>
-      </View>
+  const getFirstName = () => {
+    const rawName = user?.email?.split('@')[0] || 'Usuario';
+    const nameOnly = rawName.split('.')[0];
+    return nameOnly.charAt(0).toUpperCase() + nameOnly.slice(1);
+  };
 
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        <View style={styles.headerRow}>
-          <View>
-            <Text style={styles.welcomeText}>Hola,</Text>
-            <Text style={styles.userName}>{user?.email?.split('@')[0]}</Text>
-          </View>
-          <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
-            <Icon name="logout" size={20} color="#E17055" />
-            <Text style={styles.logoutText}>Salir</Text>
+  return (
+    <View style={styles.mainWrapper}>
+      {/* StatusBar integrada al color del Toolbar */}
+      <StatusBar barStyle="light-content" backgroundColor="#097678" />
+      
+      <SafeAreaView style={styles.safeArea}>
+        
+        {/* TU ÚNICO TOOLBAR */}
+        <View style={styles.toolbar}> 
+          <View style={styles.leftSpace} />
+          <Text style={styles.toolbarTitle}>Inicio</Text>
+          <TouchableOpacity 
+            style={styles.messageIconContainer} 
+            onPress={() => navigation.navigate('Mensajes')}
+          >
+            <Icon name="chat-processing-outline" size={26} color="#FFF" />
+            {stats.mensajesSinLeer && <View style={styles.dotBadge} />}
           </TouchableOpacity>
         </View>
 
-        <InfoCard title="Producción" value={`${stats.prendasDia} Prendas`} icon="tshirt-crew" color="#097678" subtitle="En proceso" onPress={() => navigation.navigate('Produccion')} />
-        <InfoCard title="Insumos" value={`${stats.insumosCriticos} Críticos`} icon="alert-circle" color="#E17055" subtitle={stats.insumosNombres} onPress={() => navigation.navigate('Inventario')} />
-        <InfoCard title="Máquinas" value={`${stats.maquinasTaller} en Taller`} icon="cog" color="#F1C40F" subtitle={stats.maquinasNombres} onPress={() => navigation.navigate('Máquinas')} />
-        <InfoCard title="Remisiones" value={`${stats.remisionesActivas} Activas`} icon="clipboard-text" color="#0f5ef1" subtitle={stats.remisionesNombres} onPress={() => navigation.navigate('Remisiones')} />
-
-        <TouchableOpacity 
-          style={[styles.card, stats.mensajesSinLeer && styles.cardUnread]} 
-          onPress={() => navigation.navigate('Mensajes')}
-        >
-          <View style={styles.cardContent}>
-            <Text style={styles.cardTitleBold}>Último Mensaje</Text>
-            <Text style={styles.cardSubtitle} numberOfLines={1}>{stats.ultimoMensaje}</Text>
+        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+          <View style={styles.headerRow}>
+            <View>
+              <Text style={styles.welcomeLabel}>Hola,</Text>
+              <Text style={styles.userName}>{getFirstName()}</Text>
+            </View>
+            <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
+              <Icon name="power" size={18} color="#E17055" />
+              <Text style={styles.logoutText}>Salir</Text>
+            </TouchableOpacity>
           </View>
-          {stats.mensajesSinLeer && <View style={styles.badgeRelative} />}
-          <Icon name="chevron-right" size={24} color="#CCC" />
-        </TouchableOpacity>
-      </ScrollView>
-    </SafeAreaView>
+
+          {/* TARJETAS CON TEXTOS PEQUEÑOS Y ELEGANTES */}
+          <InfoCard title="Producción" value={`${stats.prendasDia} Prendas`} icon="tshirt-crew" color="#097678" subtitle="En proceso" onPress={() => navigation.navigate('Produccion')} />
+          <InfoCard title="Insumos" value={`${stats.insumosCriticos} Críticos`} icon="alert-circle" color="#E17055" subtitle={stats.insumosNombres} onPress={() => navigation.navigate('Inventario')} />
+          <InfoCard title="Máquinas" value={`${stats.maquinasTaller} en Taller`} icon="cog" color="#F1C40F" subtitle={stats.maquinasNombres} onPress={() => navigation.navigate('Máquinas')} />
+          <InfoCard title="Remisiones" value={`${stats.remisionesActivas} Activas`} icon="clipboard-text" color="#0F5EF1" subtitle="Pendientes" onPress={() => navigation.navigate('Remisiones')} />
+
+          <TouchableOpacity 
+            style={[styles.card, stats.mensajesSinLeer && styles.cardUnread]} 
+            onPress={() => navigation.navigate('Mensajes')}
+          >
+            <View style={styles.cardContent}>
+              <Text style={styles.cardTitleBold}>Último Mensaje</Text>
+              <Text style={styles.cardSubtitle} numberOfLines={1}>{stats.ultimoMensaje}</Text>
+            </View>
+            {stats.mensajesSinLeer && <View style={styles.badgeRelative} />}
+            <Icon name="chevron-right" size={22} color="#CCC" />
+          </TouchableOpacity>
+        </ScrollView>
+      </SafeAreaView>
+    </View>
   );
 };
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F4F7F6' },
-  toolbar: { backgroundColor: '#097678', height: 60, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20 },
-  toolbarTitle: { color: '#FFF', fontSize: 18, fontWeight: 'bold' },
-  notifBtn: { position: 'relative' },
-  badge: { position: 'absolute', top: -2, right: -2, width: 12, height: 12, backgroundColor: 'red', borderRadius: 6, borderWidth: 1, borderColor: '#FFF' },
-  badgeRelative: { position: 'relative', top: 0, right: 0, width: 12, height: 12, backgroundColor: 'red', borderRadius: 6, borderWidth: 1, borderColor: '#FFF' },
-  scrollContent: { padding: 20 },
-  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-  welcomeText: { fontSize: 14, color: '#666' },
-  userName: { fontSize: 20, fontWeight: 'bold', color: '#2D3436' },
-  logoutBtn: { flexDirection: 'row', alignItems: 'center' },
-  logoutText: { color: '#E17055', marginLeft: 5, fontWeight: 'bold' },
-  card: { backgroundColor: '#FFF', borderRadius: 12, padding: 15, flexDirection: 'row', alignItems: 'center', marginBottom: 12, elevation: 2 },
-  cardUnread: { borderLeftColor: 'red', borderLeftWidth: 5 },
-  iconContainer: { padding: 10, borderRadius: 10, marginRight: 15 },
-  cardContent: { flex: 1 },
-  cardTitle: { fontSize: 13, color: '#666' },
-  cardTitleBold: { fontSize: 13, color: '#666', fontWeight: 'bold' },
-  cardValue: { fontSize: 17, fontWeight: 'bold', color: '#2D3436' },
-  cardSubtitle: { fontSize: 12, color: '#999' },
-});
-
 const InfoCard = ({ title, value, icon, color, subtitle, onPress }) => (
-  <TouchableOpacity style={styles.card} onPress={onPress}>
+  <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.8}>
     <View style={[styles.iconContainer, { backgroundColor: color }]}>
-      <Icon name={icon} size={30} color="#FFF" />
+      <Icon name={icon} size={20} color="#FFF" />
     </View>
     <View style={styles.cardContent}>
       <Text style={styles.cardTitle}>{title}</Text>
       <Text style={styles.cardValue}>{value}</Text>
-      {subtitle ? <Text style={styles.cardSubtitle}>{subtitle}</Text> : null}
+      {subtitle ? <Text style={styles.cardSubtitle} numberOfLines={1}>{subtitle}</Text> : null}
     </View>
-    <Icon name="chevron-right" size={24} color="#CCC" />
+    <Icon name="chevron-right" size={22} color="#CCC" />
   </TouchableOpacity>
 );
+
+const styles = StyleSheet.create({
+  mainWrapper: { flex: 1, backgroundColor: '#097678' },
+  safeArea: { flex: 1, backgroundColor: '#F4F7F6' },
+  toolbar: { 
+    backgroundColor: '#097678', 
+    height: Platform.OS === 'android' ? 110 : 0,
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'space-between', 
+    paddingHorizontal: 15,
+    paddingTop: Platform.OS === 'android' ? 40 : 0, 
+  },
+  toolbarTitle: { color: '#FFF', fontSize: 18, fontWeight: 'bold', textAlign: 'center', flex: 1 },
+  leftSpace: { width: 40 }, 
+  messageIconContainer: { width: 40, alignItems: 'flex-end', justifyContent: 'center', position: 'relative' },
+  dotBadge: { position: 'absolute', top: -2, right: -2, width: 10, height: 10, backgroundColor: '#FF5252', borderRadius: 5, borderWidth: 1.5, borderColor: '#097678' },
+  scrollContent: { padding: 20 },
+  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 25 },
+  welcomeLabel: { fontSize: 13, color: '#9795a6' },
+  userName: { fontSize: 20, fontWeight: 'bold', color: '#2D3436', marginTop: -4 },
+  logoutBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10, elevation: 2 },
+  logoutText: { color: '#E17055', marginLeft: 4, fontWeight: 'bold', fontSize: 12 },
+  card: { backgroundColor: '#FFF', borderRadius: 16, padding: 14, flexDirection: 'row', alignItems: 'center', marginBottom: 12, elevation: 2 },
+  iconContainer: { padding: 10, borderRadius: 12, marginRight: 12 },
+  cardContent: { flex: 1 },
+  cardTitle: { fontSize: 12, color: '#7F8C8D', fontWeight: '600', marginBottom: 1 },
+  cardValue: { fontSize: 15, fontWeight: 'bold', color: '#2D3436' },
+  cardTitleBold: { fontSize: 14, color: '#2D3436', fontWeight: 'bold' },
+  cardSubtitle: { fontSize: 11, color: '#BDC3C7' }
+});
 
 export default HomeScreen;
