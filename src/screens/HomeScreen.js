@@ -16,6 +16,7 @@ import messaging from '@react-native-firebase/messaging';
 
 const HomeScreen = ({ navigation }) => {
   const user = auth().currentUser;
+  const [realName, setRealName] = useState(''); // Estado para el nombre real
   const [stats, setStats] = useState({
     prendasDia: 0,
     remisionesActivas: 0,
@@ -29,6 +30,19 @@ const HomeScreen = ({ navigation }) => {
 
   useEffect(() => {
     if (!user) return;
+
+    // Obtener nombre real del usuario desde Firestore
+    const fetchUserData = async () => {
+      try {
+        const doc = await firestore().collection('usuarios').doc(user.uid).get();
+        if (doc.exists && doc.data().nombre) {
+          setRealName(doc.data().nombre);
+        }
+      } catch (error) {
+        console.log("Error obteniendo nombre:", error);
+      }
+    };
+    fetchUserData();
 
     const setupNotifications = async () => {
       const authStatus = await messaging().requestPermission();
@@ -93,7 +107,11 @@ const HomeScreen = ({ navigation }) => {
 
   const handleLogout = () => auth().signOut().then(() => navigation.replace('Login'));
 
-  const getFirstName = () => {
+  const getDisplayName = () => {
+    // Si existe el nombre real en Firestore, lo usamos
+    if (realName) return realName;
+    
+    // Si no, aplicamos tu lógica original sobre el email
     const rawName = user?.email?.split('@')[0] || 'Usuario';
     const nameOnly = rawName.split('.')[0];
     return nameOnly.charAt(0).toUpperCase() + nameOnly.slice(1);
@@ -101,12 +119,10 @@ const HomeScreen = ({ navigation }) => {
 
   return (
     <View style={styles.mainWrapper}>
-      {/* StatusBar integrada al color del Toolbar */}
       <StatusBar barStyle="light-content" backgroundColor="#097678" />
       
       <SafeAreaView style={styles.safeArea}>
         
-        {/* TU ÚNICO TOOLBAR */}
         <View style={styles.toolbar}> 
           <View style={styles.leftSpace} />
           <Text style={styles.toolbarTitle}>Inicio</Text>
@@ -123,7 +139,7 @@ const HomeScreen = ({ navigation }) => {
           <View style={styles.headerRow}>
             <View>
               <Text style={styles.welcomeLabel}>Hola,</Text>
-              <Text style={styles.userName}>{getFirstName()}</Text>
+              <Text style={styles.userName}>{getDisplayName()}</Text>
             </View>
             <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
               <Icon name="power" size={18} color="#E17055" />
@@ -131,7 +147,6 @@ const HomeScreen = ({ navigation }) => {
             </TouchableOpacity>
           </View>
 
-          {/* TARJETAS CON TEXTOS PEQUEÑOS Y ELEGANTES */}
           <InfoCard title="Producción" value={`${stats.prendasDia} Prendas`} icon="tshirt-crew" color="#097678" subtitle="En proceso" onPress={() => navigation.navigate('Produccion')} />
           <InfoCard title="Insumos" value={`${stats.insumosCriticos} Críticos`} icon="alert-circle" color="#E17055" subtitle={stats.insumosNombres} onPress={() => navigation.navigate('Inventario')} />
           <InfoCard title="Máquinas" value={`${stats.maquinasTaller} en Taller`} icon="cog" color="#F1C40F" subtitle={stats.maquinasNombres} onPress={() => navigation.navigate('Máquinas')} />
@@ -145,7 +160,6 @@ const HomeScreen = ({ navigation }) => {
               <Text style={styles.cardTitleBold}>Último Mensaje</Text>
               <Text style={styles.cardSubtitle} numberOfLines={1}>{stats.ultimoMensaje}</Text>
             </View>
-            {stats.mensajesSinLeer && <View style={styles.badgeRelative} />}
             <Icon name="chevron-right" size={22} color="#CCC" />
           </TouchableOpacity>
         </ScrollView>
