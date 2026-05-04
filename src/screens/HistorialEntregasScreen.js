@@ -5,13 +5,26 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import firestore from '@react-native-firebase/firestore';
+import auth from '@react-native-firebase/auth';
 
 const HistorialEntregasScreen = ({ navigation }) => {
   const [entregas, setEntregas] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [userRole, setUserRole] = useState('operario');
 
   useEffect(() => {
-    // Consultamos la colección ordenando por la fecha de entrega más reciente
+    // Obtener rol del usuario
+    const fetchUserRole = async () => {
+      try {
+        const user = auth().currentUser;
+        if (user) {
+          const userDoc = await firestore().collection('usuarios').doc(user.uid).get();
+          if (userDoc.exists) setUserRole(userDoc.data().rol);
+        }
+      } catch (e) { console.log("Error rol:", e); }
+    };
+    fetchUserRole();
+
     const subscriber = firestore()
       .collection('historial_entregas')
       .orderBy('fechaEntrega', 'desc')
@@ -30,13 +43,16 @@ const HistorialEntregasScreen = ({ navigation }) => {
     return () => subscriber();
   }, []);
 
-  // --- NUEVA FUNCIÓN PARA GESTIONAR PAGOS ---
   const actualizarPago = async (id, nuevoEstado) => {
+    // Solo gerente puede gestionar pagos
+    if (userRole !== 'gerente') {
+      Alert.alert("Sin permiso", "Solo el gerente puede gestionar el estado de pagos.");
+      return;
+    }
     try {
       await firestore().collection('historial_entregas').doc(id).update({
         estadoPago: nuevoEstado
       });
-      // No hace falta Alert de éxito porque el onSnapshot actualiza la UI solo
     } catch (e) {
       Alert.alert("Error", "No se pudo actualizar el estado de pago");
     }
@@ -44,6 +60,7 @@ const HistorialEntregasScreen = ({ navigation }) => {
 
   const renderEntrega = ({ item }) => {
     const esPagada = item.estadoPago === 'Pagada';
+    const puedeGestionarPago = userRole === 'gerente';
 
     return (
       <View style={styles.card}>
@@ -63,17 +80,20 @@ const HistorialEntregasScreen = ({ navigation }) => {
             <Icon name="tshirt-crew" size={16} color="#666" />
             <Text style={styles.statText}>{item.unidades} Prendas</Text>
           </View>
-          <View style={styles.stat}>
-            <Icon name="currency-usd" size={16} color="#27ae60" />
-            <Text style={[styles.statText, {color: '#27ae60', fontWeight: 'bold'}]}>
-              ${item.totalGeneral?.toLocaleString()}
-            </Text>
-          </View>
+          {/* Total: solo gerente */}
+          {userRole === 'gerente' && (
+            <View style={styles.stat}>
+              <Icon name="currency-usd" size={16} color="#27ae60" />
+              <Text style={[styles.statText, {color: '#27ae60', fontWeight: 'bold'}]}>
+                ${item.totalGeneral?.toLocaleString()}
+              </Text>
+            </View>
+          )}
         </View>
 
         <View style={styles.divider} />
 
-        {/* SECCIÓN DE GESTIÓN DE PAGOS */}
+        {/* Gestión de pagos: solo gerente puede cambiar estado */}
         <View style={styles.pagoRow}>
           <View style={styles.infoPago}>
             <Text style={styles.labelPago}>Estado de Pago:</Text>
@@ -84,15 +104,17 @@ const HistorialEntregasScreen = ({ navigation }) => {
             </View>
           </View>
 
-          <TouchableOpacity 
-            style={[styles.btnAccionPago, { backgroundColor: esPagada ? '#e67e22' : '#27ae60' }]}
-            onPress={() => actualizarPago(item.id, esPagada ? 'Pendiente' : 'Pagada')}
-          >
-            <Icon name={esPagada ? "cash-minus" : "cash-check"} size={18} color="#FFF" />
-            <Text style={styles.btnAccionText}>
-              {esPagada ? "Revertir" : "Cobrar"}
-            </Text>
-          </TouchableOpacity>
+          {puedeGestionarPago && (
+            <TouchableOpacity 
+              style={[styles.btnAccionPago, { backgroundColor: esPagada ? '#e67e22' : '#27ae60' }]}
+              onPress={() => actualizarPago(item.id, esPagada ? 'Pendiente' : 'Pagada')}
+            >
+              <Icon name={esPagada ? "cash-minus" : "cash-check"} size={18} color="#FFF" />
+              <Text style={styles.btnAccionText}>
+                {esPagada ? "Revertir" : "Cobrar"}
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         <View style={[styles.divider, { marginTop: 12 }]} />
@@ -109,7 +131,6 @@ const HistorialEntregasScreen = ({ navigation }) => {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        {/* <Text style={styles.title}>Historial de Entregas</Text> */}
         <Text style={styles.title}>Despachos y cobros realizados</Text>
       </View>
 
@@ -137,7 +158,6 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F4F7F6' },
   header: { padding: 20, backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#EEE' },
   title: { fontSize: 22, fontWeight: 'bold', color: '#097678' },
-  subtitle: { fontSize: 13, color: '#666' },
   card: { backgroundColor: '#FFF', borderRadius: 12, padding: 15, marginBottom: 15, elevation: 2 },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
   fechaText: { fontSize: 12, color: '#999', fontWeight: 'bold' },

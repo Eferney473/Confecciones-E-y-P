@@ -53,10 +53,12 @@ const MainTabs = () => {
     return () => unsub();
   }, [user]);
 
- return (
+  // No renderizar hasta tener el rol
+  if (!userRole) return null;
+
+  return (
     <Tab.Navigator
       screenOptions={{
-        // QUITAMOS el headerShown: false de aquí para que las demás pantallas SÍ tengan barra
         headerStyle: { backgroundColor: '#097678' },
         headerTintColor: '#FFF',
         headerTitleAlign: 'center',
@@ -70,7 +72,7 @@ const MainTabs = () => {
         name="Home" 
         component={HomeScreen} 
         options={{ 
-          headerShown: false, // <--- SOLO A ESTA le quitamos la barra del sistema
+          headerShown: false,
           tabBarIcon: ({ color, size }) => <Icon name="home-outline" size={size} color={color} /> 
         }}
       />
@@ -78,7 +80,7 @@ const MainTabs = () => {
         name="Inventario" 
         component={InventarioScreen} 
         options={{ 
-          title: 'Inventario de Insumos', // Puedes personalizar el título aquí
+          title: 'Inventario de Insumos',
           tabBarIcon: ({ color, size }) => <Icon name="archive-outline" size={size} color={color} /> 
         }} 
       />
@@ -86,13 +88,15 @@ const MainTabs = () => {
         name="Produccion" 
         component={ProduccionScreen} 
         options={{
-          title: 'Producción ',
+          title: 'Producción',
           tabBarLabel: 'Producción',
           tabBarBadge: pendientesCount > 0 ? pendientesCount : null,
           tabBarBadgeStyle: { backgroundColor: '#E74C3C', color: 'white' },
           tabBarIcon: ({ color, size }) => <Icon name="factory" color={color} size={size} />,
         }} 
       />
+
+      {/* Remisiones: visible para todos, pero solo gerente puede crear/editar/eliminar (controlado dentro de la pantalla) */}
       <Tab.Screen 
         name="Remisiones" 
         component={RemisionesScreen} 
@@ -101,6 +105,7 @@ const MainTabs = () => {
           tabBarIcon: ({ color, size }) => <Icon name="truck-outline" size={size} color={color} /> 
         }} 
       />
+
       <Tab.Screen 
         name="Máquinas" 
         component={MaquinasScreen} 
@@ -110,6 +115,7 @@ const MainTabs = () => {
         }} 
       />
 
+      {/* Mensajes: gerente y jefe_planta pueden ver y enviar. Operario NO tiene acceso */}
       {userRole !== 'operario' && (
         <Tab.Screen 
           name="Mensajes" 
@@ -130,13 +136,12 @@ const AppNavigator = () => {
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         <Stack.Screen name="Splash" component={SplashScreen} />
         <Stack.Screen name="Login" component={LoginScreen} />
-        {/* Eliminamos el HomeScreen de aquí porque ya vive dentro de "Main" */}
         <Stack.Screen name="Main" component={MainTabs} /> 
         <Stack.Screen 
           name="HistorialEntregas" 
           component={HistorialEntregasScreen} 
           options={{ 
-            headerShown: true, // El historial sí suele llevar barra con botón volver
+            headerShown: true,
             title: 'Historial de Salidas',
             headerStyle: { backgroundColor: '#097678' },
             headerTintColor: '#FFF',

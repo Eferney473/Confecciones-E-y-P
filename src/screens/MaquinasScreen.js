@@ -5,11 +5,13 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import firestore from '@react-native-firebase/firestore';
+import auth from '@react-native-firebase/auth';
 
 const MaquinasScreen = () => {
   const [maquinas, setMaquinas] = useState([]);
   const [modalVisible, setModalVisible] = useState(false);
   const [editandoId, setEditandoId] = useState(null);
+  const [userRole, setUserRole] = useState('operario');
   
   const [form, setForm] = useState({
     nombre: '',
@@ -20,8 +22,19 @@ const MaquinasScreen = () => {
     registroNotas: ''
   });
 
-  // 1. CARGA DE MÁQUINAS
   useEffect(() => {
+    // Obtener rol del usuario
+    const fetchUserRole = async () => {
+      try {
+        const user = auth().currentUser;
+        if (user) {
+          const userDoc = await firestore().collection('usuarios').doc(user.uid).get();
+          if (userDoc.exists) setUserRole(userDoc.data().rol);
+        }
+      } catch (e) { console.log("Error rol:", e); }
+    };
+    fetchUserRole();
+
     const subscriber = firestore()
       .collection('maquinas')
       .onSnapshot(querySnapshot => {
@@ -32,13 +45,16 @@ const MaquinasScreen = () => {
     return () => subscriber();
   }, []);
 
-  // 2. LÓGICA DE GUARDADO
   const guardarMaquina = async () => {
+    // Jefe de planta no puede crear/editar
+    if (userRole === 'jefe_planta') {
+      Alert.alert("Sin permiso", "No tienes permiso para modificar máquinas.");
+      return;
+    }
     if (!form.nombre || !form.serial) {
       Alert.alert("Error", "El nombre y el serial son obligatorios");
       return;
     }
-
     try {
       if (editandoId) {
         await firestore().collection('maquinas').doc(editandoId).update(form);
@@ -54,8 +70,12 @@ const MaquinasScreen = () => {
     }
   };
 
-  // 3. ELIMINAR MÁQUINA
   const eliminarMaquina = (id) => {
+    // Jefe de planta no puede eliminar
+    if (userRole === 'jefe_planta') {
+      Alert.alert("Sin permiso", "No tienes permiso para eliminar máquinas.");
+      return;
+    }
     Alert.alert("Eliminar", "¿Seguro que deseas eliminar esta máquina?", [
       { text: "No" },
       { text: "Sí", onPress: () => firestore().collection('maquinas').doc(id).delete() }
@@ -70,43 +90,55 @@ const MaquinasScreen = () => {
 
   const getStatusColor = (status) => {
     switch(status) {
-      case 'Operativa': return '#27AE60'; // Verde
-      case 'Mantenimiento': return '#F1C40F'; // Amarillo
-      case 'Falla': return '#E74C3C'; // Rojo
+      case 'Operativa': return '#27AE60';
+      case 'Mantenimiento': return '#F1C40F';
+      case 'Falla': return '#E74C3C';
       default: return '#95A5A6';
     }
   };
 
-  const renderItem = ({ item }) => (
-    <View style={styles.card}>
-      <View style={styles.cardHeader}>
-        <View>
-          <Text style={styles.maquinaTitle}>{item.nombre} - {item.marca}</Text>
-          <Text style={styles.serialText}>S/N: {item.serial}</Text>
+  const renderItem = ({ item }) => {
+    const soloLectura = userRole === 'jefe_planta';
+
+    return (
+      <View style={styles.card}>
+        <View style={styles.cardHeader}>
+          <View>
+            <Text style={styles.maquinaTitle}>{item.nombre} - {item.marca}</Text>
+            <Text style={styles.serialText}>S/N: {item.serial}</Text>
+          </View>
+          <View style={[styles.statusDot, { backgroundColor: getStatusColor(item.estado) }]} />
         </View>
-        <View style={[styles.statusDot, { backgroundColor: getStatusColor(item.estado) }]} />
-      </View>
 
-      <View style={styles.infoRow}>
-        <Icon name="calendar-check" size={16} color="#666" />
-        <Text style={styles.infoText}>Últ. Manto: {item.ultimoMantenimiento || 'Sin registro'}</Text>
-      </View>
+        <View style={styles.infoRow}>
+          <Icon name="calendar-check" size={16} color="#666" />
+          <Text style={styles.infoText}>Últ. Manto: {item.ultimoMantenimiento || 'Sin registro'}</Text>
+        </View>
 
-      <Text style={styles.notasLabel}>Notas de Mantenimiento:</Text>
-      <Text style={styles.notasText}>{item.registroNotas || 'No hay observaciones'}</Text>
+        <Text style={styles.notasLabel}>Notas de Mantenimiento:</Text>
+        <Text style={styles.notasText}>{item.registroNotas || 'No hay observaciones'}</Text>
 
-      <View style={styles.actions}>
-        <TouchableOpacity style={styles.btnAction} onPress={() => { setEditandoId(item.id); setForm(item); setModalVisible(true); }}>
-          <Icon name="pencil-outline" size={20} color="#ec9025" />
-          <Text style={[styles.btnActionText, { color: '#097678' }]}>Editar</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.btnAction} onPress={() => eliminarMaquina(item.id)}>
-          <Icon name="trash-can-outline" size={20} color="#E74C3C" />
-          <Text style={[styles.btnActionText, { color: '#E74C3C' }]}>Eliminar</Text>
-        </TouchableOpacity>
+        {/* Acciones: solo gerente y operario */}
+        {!soloLectura ? (
+          <View style={styles.actions}>
+            <TouchableOpacity style={styles.btnAction} onPress={() => { setEditandoId(item.id); setForm(item); setModalVisible(true); }}>
+              <Icon name="pencil-outline" size={20} color="#ec9025" />
+              <Text style={[styles.btnActionText, { color: '#097678' }]}>Editar</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.btnAction} onPress={() => eliminarMaquina(item.id)}>
+              <Icon name="trash-can-outline" size={20} color="#E74C3C" />
+              <Text style={[styles.btnActionText, { color: '#E74C3C' }]}>Eliminar</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <View style={styles.soloLecturaBox}>
+            <Icon name="eye-outline" size={15} color="#999" />
+            <Text style={styles.soloLecturaText}>Solo visualización</Text>
+          </View>
+        )}
       </View>
-    </View>
-  );
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -117,9 +149,12 @@ const MaquinasScreen = () => {
         contentContainerStyle={{ padding: 15 }}
       />
 
-      <TouchableOpacity style={styles.fab} onPress={() => setModalVisible(true)}>
-        <Icon name="plus" size={30} color="#FFF" />
-      </TouchableOpacity>
+      {/* FAB: solo gerente y operario */}
+      {userRole !== 'jefe_planta' && (
+        <TouchableOpacity style={styles.fab} onPress={() => setModalVisible(true)}>
+          <Icon name="plus" size={30} color="#FFF" />
+        </TouchableOpacity>
+      )}
 
       <Modal visible={modalVisible} animationType="slide">
         <ScrollView style={styles.modalScroll}>
@@ -132,7 +167,7 @@ const MaquinasScreen = () => {
             style={styles.input} 
             value={form.nombre} 
             onChangeText={t => setForm({...form, nombre: t})}
-           />
+          />
           <TextInput 
             placeholder="Marca (ej. Pegasus)" 
             placeholderTextColor='#666'
@@ -140,7 +175,7 @@ const MaquinasScreen = () => {
             style={styles.input} 
             value={form.marca} 
             onChangeText={t => setForm({...form, marca: t})} 
-        />
+          />
           <TextInput 
             placeholder="Serial (S/N)" 
             placeholderTextColor='#666'
@@ -148,7 +183,7 @@ const MaquinasScreen = () => {
             style={styles.input} 
             value={form.serial} 
             onChangeText={t => setForm({...form, serial: t})} 
-        />
+          />
           
           <Text style={styles.label}>Estado de Semáforo:</Text>
           <View style={styles.statusPicker}>
@@ -205,6 +240,8 @@ const styles = StyleSheet.create({
   actions: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 15, borderTopWidth: 1, borderTopColor: '#EEE', paddingTop: 10 },
   btnAction: { flexDirection: 'row', alignItems: 'center', marginLeft: 20 },
   btnActionText: { marginLeft: 5, fontWeight: 'bold' },
+  soloLecturaBox: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 15, paddingTop: 10, borderTopWidth: 1, borderTopColor: '#EEE' },
+  soloLecturaText: { fontSize: 12, color: '#999', marginLeft: 5, fontStyle: 'italic' },
   fab: { position: 'absolute', bottom: 20, right: 20, backgroundColor: '#097678', width: 60, height: 60, borderRadius: 30, justifyContent: 'center', alignItems: 'center', elevation: 5 },
   modalScroll: { padding: 25 },
   modalTitle: { fontSize: 22, fontWeight: 'bold', marginBottom: 25, color: '#097678' },

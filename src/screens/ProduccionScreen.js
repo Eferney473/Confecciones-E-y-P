@@ -13,9 +13,21 @@ const ProduccionScreen = ({ navigation }) => {
   const [loading, setLoading] = useState(true);
   const [modalMaquinas, setModalMaquinas] = useState(false);
   const [tareaSeleccionada, setTareaSeleccionada] = useState(null);
+  const [userRole, setUserRole] = useState('operario');
 
   useEffect(() => {
-    // Ahora solo escuchamos lo que realmente está en fabricación
+    // Obtener rol del usuario
+    const fetchUserRole = async () => {
+      try {
+        const user = auth().currentUser;
+        if (user) {
+          const userDoc = await firestore().collection('usuarios').doc(user.uid).get();
+          if (userDoc.exists) setUserRole(userDoc.data().rol);
+        }
+      } catch (e) { console.log("Error rol:", e); }
+    };
+    fetchUserRole();
+
     const subscriber = firestore()
       .collection('remisiones')
       .where('estadoProduccion', 'in', ['Pendiente', 'En Proceso', 'StandBy'])
@@ -40,7 +52,12 @@ const ProduccionScreen = ({ navigation }) => {
     return () => { subscriber(); subMaquinas(); };
   }, []);
 
+  // Solo gerente y operario pueden cambiar estado
   const cambiarEstado = async (id, nuevoEstado) => {
+    if (userRole === 'jefe_planta') {
+      Alert.alert("Sin permiso", "No tienes permiso para cambiar el estado de producción.");
+      return;
+    }
     try {
       await firestore().collection('remisiones').doc(id).update({
         estadoProduccion: nuevoEstado
@@ -50,8 +67,14 @@ const ProduccionScreen = ({ navigation }) => {
     }
   };
 
+  // Solo gerente y operario pueden asignar máquina
   const asignarMaquina = async (nombreMaquina) => {
     if (!tareaSeleccionada) return;
+    if (userRole === 'jefe_planta') {
+      Alert.alert("Sin permiso", "No tienes permiso para asignar máquinas.");
+      setModalMaquinas(false);
+      return;
+    }
     try {
       await firestore().collection('remisiones').doc(tareaSeleccionada.id).update({
         maquinaActual: nombreMaquina,
@@ -63,8 +86,12 @@ const ProduccionScreen = ({ navigation }) => {
     }
   };
 
-  // --- FUNCIÓN FINAL: TERMINA Y ENVÍA AL HISTORIAL DE UNA VEZ ---
+  // Solo gerente y operario pueden terminar
   const finalizarYEntregarDirecto = (item) => {
+    if (userRole === 'jefe_planta') {
+      Alert.alert("Sin permiso", "No tienes permiso para terminar pedidos.");
+      return;
+    }
     Alert.alert("Finalizar Pedido", `¿Confirmas que la producción de #${item.numero} terminó y se entrega al cliente?`, [
       { text: "Cancelar", style: "cancel" },
       { 
@@ -75,13 +102,11 @@ const ProduccionScreen = ({ navigation }) => {
             const remisionRef = firestore().collection('remisiones').doc(item.id);
             const historialRef = firestore().collection('historial_entregas').doc();
 
-            // 1. Desaparece de producción
             batch.update(remisionRef, { 
               estadoProduccion: 'Entregado',
               fechaFinalizado: firestore.FieldValue.serverTimestamp()
             });
 
-            // 2. Aparece en el historial de entregas
             batch.set(historialRef, {
               remisionId: item.id,
               numero: item.numero,
@@ -112,6 +137,9 @@ const ProduccionScreen = ({ navigation }) => {
       'StandBy': { color: '#e67e22', icon: 'pause-circle' }
     };
     const config = statusConfig[item.estadoProduccion] || { color: '#95a5a6', icon: 'help' };
+
+    // Jefe de planta solo ve, no puede accionar
+    const soloLectura = userRole === 'jefe_planta';
 
     return (
       <View style={styles.card}>
@@ -150,32 +178,40 @@ const ProduccionScreen = ({ navigation }) => {
             </Text>
           </View>
 
-          <View style={styles.actions}>
-            {item.estadoProduccion !== 'StandBy' ? (
-              <TouchableOpacity style={styles.actionBtn} onPress={() => cambiarEstado(item.id, 'StandBy')}>
-                <Icon name="pause-circle-outline" size={24} color="#e67e22" />
-                <Text style={styles.actionLabel}>Pausar</Text>
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity style={styles.actionBtn} onPress={() => cambiarEstado(item.id, 'En Proceso')}>
-                <Icon name="play-circle-outline" size={24} color="#3498db" />
-                <Text style={styles.actionLabel}>Reanudar</Text>
-              </TouchableOpacity>
-            )}
+          {/* Acciones: ocultas para jefe_planta */}
+          {soloLectura ? (
+            <View style={styles.soloLecturaBox}>
+              <Icon name="eye-outline" size={16} color="#999" />
+              <Text style={styles.soloLecturaText}>Solo visualización</Text>
+            </View>
+          ) : (
+            <View style={styles.actions}>
+              {item.estadoProduccion !== 'StandBy' ? (
+                <TouchableOpacity style={styles.actionBtn} onPress={() => cambiarEstado(item.id, 'StandBy')}>
+                  <Icon name="pause-circle-outline" size={24} color="#e67e22" />
+                  <Text style={styles.actionLabel}>Pausar</Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity style={styles.actionBtn} onPress={() => cambiarEstado(item.id, 'En Proceso')}>
+                  <Icon name="play-circle-outline" size={24} color="#3498db" />
+                  <Text style={styles.actionLabel}>Reanudar</Text>
+                </TouchableOpacity>
+              )}
 
-            <TouchableOpacity 
-              style={styles.actionBtn} 
-              onPress={() => { setTareaSeleccionada(item); setModalMaquinas(true); }}
-            >
-              <Icon name="swap-horizontal" size={24} color="#097678" />
-              <Text style={styles.actionLabel}>Máquina</Text>
-            </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.actionBtn} 
+                onPress={() => { setTareaSeleccionada(item); setModalMaquinas(true); }}
+              >
+                <Icon name="swap-horizontal" size={24} color="#097678" />
+                <Text style={styles.actionLabel}>Máquina</Text>
+              </TouchableOpacity>
 
-            <TouchableOpacity style={styles.actionBtn} onPress={() => finalizarYEntregarDirecto(item)}>
-              <Icon name="check-circle" size={24} color="#27ae60" />
-              <Text style={[styles.actionLabel, {color: '#27ae60', fontWeight: 'bold'}]}>TERMINAR</Text>
-            </TouchableOpacity>
-          </View>
+              <TouchableOpacity style={styles.actionBtn} onPress={() => finalizarYEntregarDirecto(item)}>
+                <Icon name="check-circle" size={24} color="#27ae60" />
+                <Text style={[styles.actionLabel, {color: '#27ae60', fontWeight: 'bold'}]}>TERMINAR</Text>
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
       </View>
     );
@@ -185,11 +221,8 @@ const ProduccionScreen = ({ navigation }) => {
     <View style={styles.container}>
       <View style={styles.header}>
         <View>
-          {/* <Text style={styles.title}>Producción Activa</Text> */}
-          <Text style={styles.title}>Gestión de procesos </Text>
+          <Text style={styles.title}>Gestión de procesos</Text>
         </View>
-        
-        {/* Botón de Historial de Entregas (Navegación al historial) */}
         <TouchableOpacity 
           style={styles.historyBtn} 
           onPress={() => navigation.navigate('HistorialEntregas')}
@@ -240,7 +273,6 @@ const styles = StyleSheet.create({
   historyBtn: { alignItems: 'center', backgroundColor: '#FFF', padding: 8, borderRadius: 12, elevation: 2 },
   historyLabel: { fontSize: 10, color: '#097678', fontWeight: 'bold' },
   title: { fontSize: 22, fontWeight: 'bold', color: '#097678' },
-  subtitle: { fontSize: 13, color: '#666' },
   card: { backgroundColor: '#FFF', borderRadius: 12, marginBottom: 15, elevation: 3, overflow: 'hidden', marginHorizontal: 5 },
   statusHeader: { padding: 6, alignItems: 'center' },
   statusText: { color: '#FFF', fontWeight: 'bold', fontSize: 11 },
@@ -261,6 +293,8 @@ const styles = StyleSheet.create({
   actions: { flexDirection: 'row', justifyContent: 'space-around', marginTop: 15, borderTopWidth: 1, borderTopColor: '#EEE', paddingTop: 12, alignItems: 'center' },
   actionBtn: { alignItems: 'center', flex: 1 },
   actionLabel: { fontSize: 11, color: '#666', marginTop: 4, fontWeight: '600' },
+  soloLecturaBox: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 15, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#EEE' },
+  soloLecturaText: { fontSize: 12, color: '#999', marginLeft: 6, fontStyle: 'italic' },
   emptyText: { textAlign: 'center', marginTop: 50, color: '#95a5a6' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
   modalContent: { backgroundColor: '#FFF', width: '85%', borderRadius: 15, padding: 20, maxHeight: '70%' },
