@@ -11,10 +11,14 @@ import {
   Platform 
 } from 'react-native';
 import auth from '@react-native-firebase/auth';
+// Importamos los iconos
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
 const LoginScreen = ({ navigation }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  // Estado para controlar la visibilidad de la contraseña
+  const [secureText, setSecureText] = useState(true);
 
   const handleLogin = () => {
     if (email && password) {
@@ -34,7 +38,6 @@ const LoginScreen = ({ navigation }) => {
         style={styles.content}
       >
         <View style={styles.logoContainer}>
-          {/* Asegúrate de tener tu logo en src/assets/logo.png */}
           <Image 
             source={require('../assets/logo.png')} 
             style={styles.logo}
@@ -52,14 +55,28 @@ const LoginScreen = ({ navigation }) => {
             keyboardType="email-address"
             autoCapitalize="none"
           />
-          <TextInput
-            style={styles.input}
-            placeholder="Contraseña"
-            placeholderTextColor="#A0A0A0"
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-          />
+
+          {/* Contenedor especial para el input de contraseña con icono */}
+          <View style={styles.passwordContainer}>
+            <TextInput
+              style={styles.inputPassword}
+              placeholder="Contraseña"
+              placeholderTextColor="#A0A0A0"
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry={secureText} // Depende del estado
+            />
+            <TouchableOpacity 
+              style={styles.eyeIcon} 
+              onPress={() => setSecureText(!secureText)}
+            >
+              <Icon 
+                name={secureText ? "eye-off" : "eye"} 
+                size={24} 
+                color="#666" 
+              />
+            </TouchableOpacity>
+          </View>
 
           <TouchableOpacity style={styles.loginBtn} onPress={handleLogin}>
             <Text style={styles.loginText}>Ingresar</Text>
@@ -73,7 +90,7 @@ const LoginScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#097678', // El verde esmeralda que pidió el cliente
+    backgroundColor: '#097678',
   },
   content: {
     flex: 1,
@@ -82,14 +99,16 @@ const styles = StyleSheet.create({
   },
   logoContainer: {
     alignItems: 'center',
-    marginBottom: 50,
+    // Aumentamos el margen inferior para bajar los inputs
+    marginBottom: 80, 
   },
   logo: {
-    width: 220,
-    height: 120,
+    // Logo más grande como pidió el cliente
+    width: 280, 
+    height: 180,
   },
   formContainer: {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)', // Fondo semi-transparente muy sutil
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
     padding: 20,
     borderRadius: 20,
   },
@@ -101,14 +120,38 @@ const styles = StyleSheet.create({
     marginBottom: 15,
     fontSize: 16,
     color: '#2D3436',
-    elevation: 3, // Sombra en Android
-    shadowColor: '#000', // Sombra en iOS
+    elevation: 3,
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
   },
+  // Nuevo estilo para el contenedor de la contraseña
+  passwordContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF',
+    height: 55,
+    borderRadius: 12,
+    marginBottom: 15,
+    paddingHorizontal: 15,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  inputPassword: {
+    flex: 1,
+    height: 55,
+    fontSize: 16,
+    color: '#2D3436',
+  },
+  eyeIcon: {
+    padding: 5,
+  },
   loginBtn: {
-    backgroundColor: '#055455', // Un verde un poco más oscuro para el botón
+    backgroundColor: '#055455',
     height: 55,
     borderRadius: 12,
     justifyContent: 'center',

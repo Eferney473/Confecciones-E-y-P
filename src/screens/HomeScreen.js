@@ -7,7 +7,8 @@ import {
   TouchableOpacity, 
   SafeAreaView, 
   StatusBar, 
-  Platform 
+  Platform,
+  Image 
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import auth from '@react-native-firebase/auth';
@@ -16,7 +17,7 @@ import messaging from '@react-native-firebase/messaging';
 
 const HomeScreen = ({ navigation }) => {
   const user = auth().currentUser;
-  const [realName, setRealName] = useState(''); // Estado para el nombre real
+  const [realName, setRealName] = useState('');
   const [stats, setStats] = useState({
     prendasDia: 0,
     remisionesActivas: 0,
@@ -24,14 +25,12 @@ const HomeScreen = ({ navigation }) => {
     insumosNombres: '',
     maquinasTaller: 0,
     maquinasNombres: '',
-    ultimoMensaje: 'Sin mensajes',
-    mensajesSinLeer: false,
   });
 
   useEffect(() => {
     if (!user) return;
 
-    // Obtener nombre real del usuario desde Firestore
+    // Obtener nombre real
     const fetchUserData = async () => {
       try {
         const doc = await firestore().collection('usuarios').doc(user.uid).get();
@@ -44,6 +43,7 @@ const HomeScreen = ({ navigation }) => {
     };
     fetchUserData();
 
+    // Notificaciones (FCM)
     const setupNotifications = async () => {
       const authStatus = await messaging().requestPermission();
       if (authStatus === messaging.AuthorizationStatus.AUTHORIZED) {
@@ -57,9 +57,9 @@ const HomeScreen = ({ navigation }) => {
     };
     setupNotifications();
 
+    // Suscripciones a Firestore
     const subRemisiones = firestore().collection('remisiones').onSnapshot(snap => {
-      let total = 0;
-      let activas = 0;
+      let total = 0; let activas = 0;
       snap?.forEach(doc => {
         const data = doc.data();
         if (data.estadoProduccion !== 'Entregado') {
@@ -88,30 +88,15 @@ const HomeScreen = ({ navigation }) => {
       setStats(prev => ({ ...prev, maquinasTaller: t.length, maquinasNombres: t.join(', ') || 'Operativas' }));
     });
 
-    const subMensajes = firestore().collection('mensajes')
-      .orderBy('fecha', 'desc').limit(1).onSnapshot(snap => {
-        if (snap && !snap.empty) {
-          const m = snap.docs[0].data();
-          setStats(prev => ({
-            ...prev,
-            ultimoMensaje: m.texto,
-            mensajesSinLeer: m.enviadoPor !== user.uid && m.leido === false,
-          }));
-        }
-      });
-
     return () => {
-      subRemisiones(); subInventario(); subMaquinas(); subMensajes();
+      subRemisiones(); subInventario(); subMaquinas();
     };
   }, [user]);
 
   const handleLogout = () => auth().signOut().then(() => navigation.replace('Login'));
 
   const getDisplayName = () => {
-    // Si existe el nombre real en Firestore, lo usamos
     if (realName) return realName;
-    
-    // Si no, aplicamos tu lógica original sobre el email
     const rawName = user?.email?.split('@')[0] || 'Usuario';
     const nameOnly = rawName.split('.')[0];
     return nameOnly.charAt(0).toUpperCase() + nameOnly.slice(1);
@@ -123,16 +108,17 @@ const HomeScreen = ({ navigation }) => {
       
       <SafeAreaView style={styles.safeArea}>
         
+        {/* TOOLBAR ACTUALIZADO: Sin mensaje, con Logo del taller */}
         <View style={styles.toolbar}> 
-          <View style={styles.leftSpace} />
+          <View style={styles.logoContainerToolbar}>
+             <Image 
+                source={require('../assets/logo.png')} 
+                style={styles.logoMini}
+                resizeMode="contain"
+             />
+          </View>
           <Text style={styles.toolbarTitle}>Inicio</Text>
-          <TouchableOpacity 
-            style={styles.messageIconContainer} 
-            onPress={() => navigation.navigate('Mensajes')}
-          >
-            <Icon name="chat-processing-outline" size={26} color="#FFF" />
-            {stats.mensajesSinLeer && <View style={styles.dotBadge} />}
-          </TouchableOpacity>
+          <View style={styles.rightSpace} />
         </View>
 
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -147,38 +133,30 @@ const HomeScreen = ({ navigation }) => {
             </TouchableOpacity>
           </View>
 
-          <InfoCard title="Producción" value={`${stats.prendasDia} Prendas`} icon="tshirt-crew" color="#097678" subtitle="En proceso" onPress={() => navigation.navigate('Produccion')} />
-          <InfoCard title="Insumos" value={`${stats.insumosCriticos} Críticos`} icon="alert-circle" color="#E17055" subtitle={stats.insumosNombres} onPress={() => navigation.navigate('Inventario')} />
-          <InfoCard title="Máquinas" value={`${stats.maquinasTaller} en Taller`} icon="cog" color="#F1C40F" subtitle={stats.maquinasNombres} onPress={() => navigation.navigate('Máquinas')} />
-          <InfoCard title="Remisiones" value={`${stats.remisionesActivas} Activas`} icon="clipboard-text" color="#0F5EF1" subtitle="Pendientes" onPress={() => navigation.navigate('Remisiones')} />
+          {/* Tarjetas con mayor altura y diseño más limpio */}
+          <InfoCard title="Producción" value={`${stats.prendasDia} Prendas`} icon="tshirt-crew" color="#097678" subtitle="En proceso de confección" onPress={() => navigation.navigate('Produccion')} />
+          <InfoCard title="Insumos" value={`${stats.insumosCriticos} Críticos`} icon="alert-circle" color="#E17055" subtitle={stats.insumosNombres || "Inventario al día"} onPress={() => navigation.navigate('Inventario')} />
+          <InfoCard title="Máquinas" value={`${stats.maquinasTaller} en Falla`} icon="cog" color="#F1C40F" subtitle={stats.maquinasNombres} onPress={() => navigation.navigate('Máquinas')} />
+          <InfoCard title="Remisiones" value={`${stats.remisionesActivas} Activas`} icon="clipboard-text" color="#0F5EF1" subtitle="Pendientes por entregar" onPress={() => navigation.navigate('Remisiones')} />
 
-          <TouchableOpacity 
-            style={[styles.card, stats.mensajesSinLeer && styles.cardUnread]} 
-            onPress={() => navigation.navigate('Mensajes')}
-          >
-            <View style={styles.cardContent}>
-              <Text style={styles.cardTitleBold}>Último Mensaje</Text>
-              <Text style={styles.cardSubtitle} numberOfLines={1}>{stats.ultimoMensaje}</Text>
-            </View>
-            <Icon name="chevron-right" size={22} color="#CCC" />
-          </TouchableOpacity>
         </ScrollView>
       </SafeAreaView>
     </View>
   );
 };
 
+// Componente InfoCard con altura ajustada (padding de 20 en lugar de 14)
 const InfoCard = ({ title, value, icon, color, subtitle, onPress }) => (
   <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.8}>
     <View style={[styles.iconContainer, { backgroundColor: color }]}>
-      <Icon name={icon} size={20} color="#FFF" />
+      <Icon name={icon} size={28} color="#FFF" />
     </View>
     <View style={styles.cardContent}>
       <Text style={styles.cardTitle}>{title}</Text>
       <Text style={styles.cardValue}>{value}</Text>
       {subtitle ? <Text style={styles.cardSubtitle} numberOfLines={1}>{subtitle}</Text> : null}
     </View>
-    <Icon name="chevron-right" size={22} color="#CCC" />
+    <Icon name="chevron-right" size={26} color="#CCC" />
   </TouchableOpacity>
 );
 
@@ -187,30 +165,43 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#F4F7F6' },
   toolbar: { 
     backgroundColor: '#097678', 
-    height: Platform.OS === 'android' ? 110 : 0,
+    height: Platform.OS === 'android' ? 100 : 60,
     flexDirection: 'row', 
     alignItems: 'center', 
     justifyContent: 'space-between', 
     paddingHorizontal: 15,
-    paddingTop: Platform.OS === 'android' ? 40 : 0, 
+    paddingTop: Platform.OS === 'android' ? 30 : 0, 
   },
-  toolbarTitle: { color: '#FFF', fontSize: 18, fontWeight: 'bold', textAlign: 'center', flex: 1 },
-  leftSpace: { width: 40 }, 
-  messageIconContainer: { width: 40, alignItems: 'flex-end', justifyContent: 'center', position: 'relative' },
-  dotBadge: { position: 'absolute', top: -2, right: -2, width: 10, height: 10, backgroundColor: '#FF5252', borderRadius: 5, borderWidth: 1.5, borderColor: '#097678' },
+  logoContainerToolbar: { width: 50, height: 50, justifyContent: 'center' },
+  logoMini: { width: 65, height: 65,  }, // El tintColor pone el logo blanco para que resalte
+  toolbarTitle: { color: '#FFF', fontSize: 19, fontWeight: 'bold', textAlign: 'center', flex: 1, marginRight: 50 },
+  rightSpace: { width: 0 }, 
   scrollContent: { padding: 20 },
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 25 },
-  welcomeLabel: { fontSize: 13, color: '#9795a6' },
-  userName: { fontSize: 20, fontWeight: 'bold', color: '#2D3436', marginTop: -4 },
-  logoutBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10, elevation: 2 },
-  logoutText: { color: '#E17055', marginLeft: 4, fontWeight: 'bold', fontSize: 12 },
-  card: { backgroundColor: '#FFF', borderRadius: 16, padding: 14, flexDirection: 'row', alignItems: 'center', marginBottom: 12, elevation: 2 },
-  iconContainer: { padding: 10, borderRadius: 12, marginRight: 12 },
+  welcomeLabel: { fontSize: 14, color: '#9795a6' },
+  userName: { fontSize: 24, fontWeight: 'bold', color: '#2D3436', marginTop: -2 },
+  logoutBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12, elevation: 3 },
+  logoutText: { color: '#E17055', marginLeft: 4, fontWeight: 'bold', fontSize: 13 },
+  
+  // TARJETAS MÁS ALTAS Y VISIBLES
+  card: { 
+    backgroundColor: '#FFF', 
+    borderRadius: 20, 
+    padding: 20, // Aumentado para mayor altura
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    marginBottom: 16, 
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 5,
+  },
+  iconContainer: { padding: 14, borderRadius: 16, marginRight: 15 },
   cardContent: { flex: 1 },
-  cardTitle: { fontSize: 12, color: '#7F8C8D', fontWeight: '600', marginBottom: 1 },
-  cardValue: { fontSize: 15, fontWeight: 'bold', color: '#2D3436' },
-  cardTitleBold: { fontSize: 14, color: '#2D3436', fontWeight: 'bold' },
-  cardSubtitle: { fontSize: 11, color: '#BDC3C7' }
+  cardTitle: { fontSize: 14, color: '#7F8C8D', fontWeight: '600', marginBottom: 2 },
+  cardValue: { fontSize: 18, fontWeight: 'bold', color: '#2D3436' },
+  cardSubtitle: { fontSize: 12, color: '#BDC3C7', marginTop: 2 }
 });
 
 export default HomeScreen;

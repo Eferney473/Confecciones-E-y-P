@@ -20,12 +20,21 @@ const MensajesScreen = ({ navigation }) => {
       .orderBy('fecha', 'desc')
       .onSnapshot(querySnapshot => {
         if (!querySnapshot) return;
+        
         const msgs = [];
         querySnapshot.forEach(doc => {
-          msgs.push({ ...doc.data(), id: doc.id });
           const data = doc.data();
+          msgs.push({ ...data, id: doc.id });
+
+          // LÓGICA DE LEÍDO:
+          // Solo marcamos como leídos los mensajes que YO recibo (enviadoPor !== mi id)
+          // y que aún están como falso en la base de datos.
           if (data.enviadoPor !== user.uid && data.leido === false) {
-            firestore().collection('mensajes').doc(doc.id).update({ leido: true });
+            firestore()
+              .collection('mensajes')
+              .doc(doc.id)
+              .update({ leido: true })
+              .catch(err => console.log("Error al actualizar lectura:", err));
           }
         });
         setMensajes(msgs);
@@ -44,7 +53,7 @@ const MensajesScreen = ({ navigation }) => {
       enviadoPor: user.uid,
       userName: user.email.split('@')[0],
       fecha: firestore.FieldValue.serverTimestamp(),
-      leido: false,
+      leido: false, // Todo mensaje nuevo nace sin leer
     };
 
     try {
@@ -69,10 +78,12 @@ const MensajesScreen = ({ navigation }) => {
           <Text style={[styles.textMsg, esMio && { color: '#FFF' }]}>{item.texto}</Text>
           <View style={styles.footerMsg}>
             <Text style={[styles.horaText, esMio && { color: '#B2DFDB' }]}>{hora}</Text>
+            
+            {/* EL CHECK AZUL: Solo se muestra en MIS mensajes enviados */}
             {esMio && (
               <Icon 
-                name="check-all" 
-                size={15} 
+                name={item.leido ? "check-all" : "check"} // Un solo check si no lo han visto, doble si ya
+                size={16} 
                 color={item.leido ? "#34B7F1" : "#B2DFDB"} 
                 style={{ marginLeft: 4 }} 
               />
@@ -87,7 +98,6 @@ const MensajesScreen = ({ navigation }) => {
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFF" />
       
-      {/* El behavior 'padding' en iOS y 'height' en Android suele ser la combinación ganadora */}
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -112,7 +122,6 @@ const MensajesScreen = ({ navigation }) => {
               onChangeText={setNuevoMensaje}
               multiline
             />
-            {/* AQUÍ ESTÁ EL BOTÓN DE ENVIAR CON SU FUNCIÓN RESTAURADA */}
             <TouchableOpacity 
               style={[styles.sendBtn, !nuevoMensaje.trim() && { opacity: 0.5 }]} 
               onPress={enviarMensaje}
@@ -128,69 +137,20 @@ const MensajesScreen = ({ navigation }) => {
 };
 
 const styles = StyleSheet.create({
-  container: { 
-    flex: 1, 
-    backgroundColor: '#F2F2F2' // Gris sólido profesional
-  },
-  listContent: { 
-    paddingHorizontal: 12, 
-    paddingVertical: 20 
-  },
-  msgWrapper: { 
-    width: '100%', 
-    marginBottom: 10 
-  },
-  msgContainer: { 
-    paddingHorizontal: 14, 
-    paddingVertical: 8, 
-    maxWidth: '80%', 
-    borderRadius: 15 
-  },
-  miMsg: { 
-    backgroundColor: '#097678', 
-    borderBottomRightRadius: 2, 
-    elevation: 2 
-  },
-  otroMsg: { 
-    backgroundColor: '#FFF', 
-    borderBottomLeftRadius: 2, 
-    elevation: 1 
-  },
+  container: { flex: 1, backgroundColor: '#F2F2F2' },
+  listContent: { paddingHorizontal: 12, paddingVertical: 20 },
+  msgWrapper: { width: '100%', marginBottom: 10 },
+  msgContainer: { paddingHorizontal: 14, paddingVertical: 8, maxWidth: '80%', borderRadius: 15 },
+  miMsg: { backgroundColor: '#097678', borderBottomRightRadius: 2, elevation: 2 },
+  otroMsg: { backgroundColor: '#FFF', borderBottomLeftRadius: 2, elevation: 1 },
   textMsg: { fontSize: 15, color: '#333' },
   senderName: { fontSize: 10, fontWeight: 'bold', color: '#097678', marginBottom: 2 },
   footerMsg: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 4, alignItems: 'center' },
   horaText: { fontSize: 9, color: '#999' },
-  inputArea: { 
-    paddingHorizontal: 10, 
-    paddingVertical: 10, 
-    backgroundColor: '#FFF', 
-    borderTopWidth: 1,
-    borderTopColor: '#EEE'
-  },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F5F5F5',
-    borderRadius: 25,
-    paddingHorizontal: 15,
-    paddingVertical: 5,
-  },
-  input: { 
-    flex: 1, 
-    maxHeight: 100, 
-    color: '#333', 
-    fontSize: 16,
-    paddingVertical: 8
-  },
-  sendBtn: {
-    backgroundColor: '#097678',
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginLeft: 5,
-  },
+  inputArea: { paddingHorizontal: 10, paddingVertical: 10, backgroundColor: '#FFF', borderTopWidth: 1, borderTopColor: '#EEE' },
+  inputContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F5F5F5', borderRadius: 25, paddingHorizontal: 15, paddingVertical: 5 },
+  input: { flex: 1, maxHeight: 100, color: '#333', fontSize: 16, paddingVertical: 8 },
+  sendBtn: { backgroundColor: '#097678', width: 42, height: 42, borderRadius: 21, justifyContent: 'center', alignItems: 'center', marginLeft: 5 },
 });
 
 export default MensajesScreen;

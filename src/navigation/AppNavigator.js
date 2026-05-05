@@ -23,10 +23,12 @@ const Tab = createBottomTabNavigator();
 
 const MainTabs = () => {
   const [pendientesCount, setPendientesCount] = useState(0);
+  const [mensajesNuevosCount, setMensajesNuevosCount] = useState(0); // Nueva variable corregida
   const [userRole, setUserRole] = useState(null); 
   const user = auth().currentUser;
 
   useEffect(() => {
+    // 1. Cargar Rol del Usuario
     const fetchRole = async () => {
       if (user) {
         try {
@@ -41,7 +43,8 @@ const MainTabs = () => {
     };
     fetchRole();
 
-    const unsub = firestore()
+    // 2. Listener para Remisiones Pendientes
+    const unsubRemisiones = firestore()
       .collection('remisiones')
       .where('estadoProduccion', '==', 'Pendiente')
       .onSnapshot(querySnapshot => {
@@ -50,7 +53,22 @@ const MainTabs = () => {
         }
       });
 
-    return () => unsub();
+    // 3. Listener para Mensajes no leídos (PUNTO ROJO)
+    const unsubMensajes = firestore()
+      .collection('mensajes')
+      .where('leido', '==', false)
+      .onSnapshot(querySnapshot => {
+        if (querySnapshot) {
+          // Filtramos para que solo cuente los mensajes que NO envié yo
+          const noLeidos = querySnapshot.docs.filter(doc => doc.data().enviadoPor !== user?.uid);
+          setMensajesNuevosCount(noLeidos.length);
+        }
+      });
+
+    return () => {
+      unsubRemisiones();
+      unsubMensajes();
+    };
   }, [user]);
 
   // No renderizar hasta tener el rol
@@ -80,7 +98,7 @@ const MainTabs = () => {
         name="Inventario" 
         component={InventarioScreen} 
         options={{ 
-          title: 'Inventario de Insumos',
+          title: 'Inventario',
           tabBarIcon: ({ color, size }) => <Icon name="archive-outline" size={size} color={color} /> 
         }} 
       />
@@ -96,7 +114,6 @@ const MainTabs = () => {
         }} 
       />
 
-      {/* Remisiones: visible para todos, pero solo gerente puede crear/editar/eliminar (controlado dentro de la pantalla) */}
       <Tab.Screen 
         name="Remisiones" 
         component={RemisionesScreen} 
@@ -110,18 +127,20 @@ const MainTabs = () => {
         name="Máquinas" 
         component={MaquinasScreen} 
         options={{ 
-          title: 'Estado de Máquinas',
+          title: 'Máquinas',
           tabBarIcon: ({ color, size }) => <Icon name="cog" size={size} color={color} /> 
         }} 
       />
 
-      {/* Mensajes: gerente y jefe_planta pueden ver y enviar. Operario NO tiene acceso */}
+      {/* Mensajes con Badge dinámico */}
       {userRole !== 'operario' && (
         <Tab.Screen 
           name="Mensajes" 
           component={MensajesScreen} 
           options={{ 
-            title: 'Bandeja de Mensajes',
+            title: 'Mensajes',
+            // Si hay mensajes nuevos, muestra el número o un punto vacío ""
+            tabBarBadge: mensajesNuevosCount > 0 ? mensajesNuevosCount : null,
             tabBarIcon: ({ color, size }) => <Icon name="chat-outline" size={size} color={color} /> 
           }} 
         />
